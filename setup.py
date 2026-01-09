@@ -7,8 +7,8 @@ README = open(os.path.join(os.path.dirname(__file__), 'README.rst')).read()
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
-    name='django-async-upload',
-    version='4.0.1',
+    name='django-resumable-async-upload',
+    version='4.0.2',
     packages=['admin_async_upload'],
     include_package_data=True,
     package_data={
@@ -21,9 +21,9 @@ setup(
     license='MIT License',
     description='A Django app for the uploading of large files from the django admin site.',
     long_description=README,
-    url='https://github.com/bit/django-async-upload',
-    author='j',
-    author_email='j@mailb.org',
+    url='https://github.com/Ecotrust/django-resumable-async-upload',
+    author='Paige Williams',
+    author_email='pwilliams@ecotrust.org',
     classifiers=[
         'Environment :: Web Environment',
         'Framework :: Django',
