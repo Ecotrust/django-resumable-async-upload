@@ -72,7 +72,15 @@ class TestOrphanedFileCleanupMiddleware:
     
     def test_cleanup_on_get_request(self, middleware, request_factory):
         """Test that files ARE cleaned up on GET requests."""
-        request = add_session_to_request(request_factory.get('/admin/'))
+
+        def get_with_referer(*args, **kwargs):
+            kwargs.setdefault('HTTP_REFERER', '/admin/foo/add/')
+            return original_get(*args, **kwargs)
+        
+        original_get = request_factory.get
+        
+        request_factory.get = get_with_referer
+        request = add_session_to_request(request_factory.get('/admin/foo/'))
         
         test_file_path = 'test_uploads/test_file.txt'
         request.session[SESSION_UPLOADED_FILES_KEY] = [test_file_path]
@@ -108,6 +116,13 @@ class TestOrphanedFileCleanupMiddleware:
     
     def test_cleanup_multiple_files(self, middleware, request_factory):
         """Test that multiple orphaned files are cleaned up."""
+        def get_with_referer(*args, **kwargs):
+            kwargs.setdefault('HTTP_REFERER', '/admin/foo/add/')
+            return original_get(*args, **kwargs)
+        
+        original_get = request_factory.get
+        
+        request_factory.get = get_with_referer
         request = add_session_to_request(request_factory.get('/admin/'))
         
         test_files = [
@@ -133,6 +148,13 @@ class TestOrphanedFileCleanupMiddleware:
     
     def test_cleanup_handles_missing_files(self, middleware, request_factory):
         """Test that cleanup handles files that don't exist gracefully."""
+        def get_with_referer(*args, **kwargs):
+            kwargs.setdefault('HTTP_REFERER', '/admin/foo/add/')
+            return original_get(*args, **kwargs)
+        
+        original_get = request_factory.get
+        
+        request_factory.get = get_with_referer
         request = add_session_to_request(request_factory.get('/admin/'))
         
         # Add files to session, but don't create them
@@ -190,6 +212,13 @@ class TestOrphanedFileCleanupMiddleware:
     
     def test_cleanup_only_removes_existing_files(self, middleware, request_factory):
         """Test that cleanup only removes files that exist in storage."""
+        def get_with_referer(*args, **kwargs):
+            kwargs.setdefault('HTTP_REFERER', '/admin/foo/add/')
+            return original_get(*args, **kwargs)
+        
+        original_get = request_factory.get
+        
+        request_factory.get = get_with_referer
         request = add_session_to_request(request_factory.get('/admin/'))
         
         existing_file = 'test_uploads/exists.txt'
