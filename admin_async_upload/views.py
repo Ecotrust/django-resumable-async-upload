@@ -6,6 +6,9 @@ from django.views.generic import View
 from admin_async_upload.files import ResumableFile
 
 
+SESSION_UPLOADED_FILES_KEY = 'admin_resumable_uploaded_files'
+
+
 class UploadView(View):
     # inspired by another fork https://github.com/fdemmer/django-admin-resumable-js
 
@@ -24,7 +27,10 @@ class UploadView(View):
         if not r.chunk_exists:
             r.process_chunk(chunk)
         if r.is_complete:
-            return HttpResponse(r.collect())
+            file_path = r.collect()
+            # Track uploaded file in session for potential cleanup
+            self._track_uploaded_file(request, file_path)
+            return HttpResponse(file_path)
         return HttpResponse('chunk uploaded')
 
     def get(self, request, *args, **kwargs):
@@ -34,6 +40,14 @@ class UploadView(View):
         if r.is_complete:
             return HttpResponse(r.collect())
         return HttpResponse('chunk exists')
+
+    def _track_uploaded_file(self, request, file_path):
+        """Track uploaded files in session for cleanup if form is not saved."""
+        if SESSION_UPLOADED_FILES_KEY not in request.session:
+            request.session[SESSION_UPLOADED_FILES_KEY] = []
+        if file_path not in request.session[SESSION_UPLOADED_FILES_KEY]:
+            request.session[SESSION_UPLOADED_FILES_KEY].append(file_path)
+            request.session.modified = True
 
 
 admin_resumable = login_required(UploadView.as_view())
