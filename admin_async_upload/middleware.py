@@ -45,7 +45,7 @@ class OrphanedFileCleanupMiddleware:
                     if storage.exists(file_path):
                         storage.delete(file_path)
                 except Exception as e:
-                    pass
+                    return
             
             request.session.pop(SESSION_UPLOADED_FILES_KEY, None)
             request.session.modified = True

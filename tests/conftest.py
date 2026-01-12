@@ -68,6 +68,7 @@ def pytest_configure():
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django.contrib.messages.middleware.MessageMiddleware",
             "django.middleware.clickjacking.XFrameOptionsMiddleware",
+            "admin_async_upload.middleware.OrphanedFileCleanupMiddleware",
         ),
         INSTALLED_APPS=(
             "django.contrib.admin",
