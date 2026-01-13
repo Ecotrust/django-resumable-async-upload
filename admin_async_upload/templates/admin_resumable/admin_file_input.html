@@ -12,111 +12,155 @@
   (function($) {
       function setupField(elementId) {
 
-          console.log('setting up '+ elementId);
+        console.log('setting up '+ elementId);
 
-          $('form').submit(function() {
-              if($(this).hasClass(elementId + '_disabled')) {
-                  alert("File upload is still in progress.")  //FIXME: fires several alerts for each file
-                  return false;
-              }
-          });
+        $('form').submit(function() {
+            if($(this).hasClass(elementId + '_disabled')) {
+                alert("File upload is still in progress.")  //FIXME: fires several alerts for each file
+                return false;
+            }
+        });
 
-          if (!(new Resumable().support)) {
-              alert("No uploader support");
-          }
-          var r = new Resumable({
-              target: '{% url 'admin_resumable' %}',
-              chunkSize: {{ chunk_size }},
-                maxFiles: 1,
-              query: {
-                  csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(),
-                  field_name: '{{ field_name }}',                 {# FIXME: this probably should be checked at run time for added inlines #}
-                  content_type_id: '{{ content_type_id }}',       {# FIXME: this probably should be checked at run time for added inlines #}
-                  instance_id: '{{ instance_id }}'
-              },
-              simultaneousUploads: {{ simultaneous_uploads }}, //3 is better, 1 is used for local testing;
-          });
-          r.assignBrowse($('#' + elementId + '_input_file'));
-          r.on('fileAdded', function(file) {
-              r.upload();
-              $("#" + elementId + "_uploaded_status").html(file.fileName + ' ⏳ Uploading... ');
-              {#console.log(file)#}
-              $("form").addClass(elementId + "_disabled");
-          });
-          r.on('fileSuccess', function(file, message) {
+        if (!(new Resumable().support)) {
+            alert("No uploader support");
+        }
+        var r = new Resumable({
+            target: '{% url 'admin_resumable' %}',
+            chunkSize: {{ chunk_size }},
+            maxFiles: 1,
+            query: {
+                csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(),
+                field_name: '{{ field_name }}',                 {# FIXME: this probably should be checked at run time for added inlines #}
+                content_type_id: '{{ content_type_id }}',       {# FIXME: this probably should be checked at run time for added inlines #}
+                instance_id: '{{ instance_id }}'
+            },
+            simultaneousUploads: {{ simultaneous_uploads }}, //3 is better, 1 is used for local testing;
+        });
 
-              ///check that the name of the file is returned and not "chunk uploaded"
-              if(message.toLowerCase().includes("chunk uploaded"))
-              {
-                  //this means some upload error occured - that happens occasionaly (not sure why yet)
-                  //in this case the file was actually not fully uploaded and saving the form
-                  //will fail
-                  //TODO: fix this case properly. I cannot find a patter to reproduce it
+        var isPaused = false;
 
-                  //set value to null, so the form won;t try to save the file
-                  $('#'+elementId).val("");
-                    $("#" + elementId + "_uploaded_status").html(message + ' Error while uploading - please re-upload this file');
-              }
-              else {
-                  $('#'+elementId).val(message);
-                    $("#" + elementId + "_uploaded_status").html(message + '✅ Uploaded');
-              }
-              // console.log("fileSuccess fired " + file + " " + message)
+        $('#' + elementId + '_cancel').on('click', function() {
+            r.cancel();
+            isPaused = false;
+            console.log("Upload cancelled");
+            $("#" + elementId + "_uploaded_status").html('Upload cancelled');
+            $("#" + elementId + "_input_file").show();
+            $('#' + elementId + '_progress').hide();
+            $('#' + elementId + '_cancel').hide();
+            $('#' + elementId + '_pause').hide();
+            $('#' + elementId + '_resume').hide();
+            $("form").removeClass(elementId + "_disabled");
+        });
 
-              $("form").removeClass(elementId + "_disabled");
+        $('#' + elementId + '_pause').on('click', function() {
+            if (!isPaused) {
+                isPaused = true;
+                r.pause();
+                console.log("Upload paused");
+                $("#" + elementId + "_uploaded_status").html('Upload paused');
+                $('#' + elementId + '_pause').hide();
+                $('#' + elementId + '_resume').show();
+            }
+        });
 
-          });
-          r.on('fileError', function(file, message) {
-              $("#" + elementId + "_uploaded_status").html(message);
-          });
-          r.on('progress', function(file, message) {
-              let progress = r.progress();
-              if(progress==0)
-              {
-                  //don't show 0 if there is any progress but server does not report actual progress
-                  //show something at least so user won't be confused
-                  progress=0.05;
-              }
-                $("#" + elementId + "_uploaded_status").html(Math.floor(progress *100) + '%' + ' Uploading... ');
-              $('#' + elementId + '_progress').val(progress);
-          });
+        $('#' + elementId + '_resume').on('click', function() {
+            if (isPaused) {
+                isPaused = false;
+                r.upload();
+                console.log("Upload resumed");
+                $("#" + elementId + "_uploaded_status").html('Resuming upload... ');
+                $('#' + elementId + '_resume').hide();
+                $('#' + elementId + '_pause').show();
+            }
+        });
+
+        r.assignBrowse($('#' + elementId + '_input_file'));
+        r.on('fileAdded', function(file) {
+            r.upload();
+            $("#" + elementId + "_uploaded_status").html(file.fileName + ' Uploading... ');
+            $("form").addClass(elementId + "_disabled");
+            $("#" + elementId + "_input_file").hide();
+            $('#' + elementId + '_progress').show();
+            $('#' + elementId + '_cancel').show();
+            $('#' + elementId + '_pause').show();
+        });
+
+        r.on('fileSuccess', function(file, message) {
+            // Hide progress bar and cancel/pause/resume buttons. show file input again
+            $('#' + elementId + '_progress').hide();
+            $('#' + elementId + '_cancel').hide();
+            $('#' + elementId + '_pause').hide();
+            $('#' + elementId + '_resume').hide();
+            $("#" + elementId + "_input_file").show();
+
+            // Check that the name of the file is returned and not "chunk uploaded"
+            if(message.toLowerCase().includes("chunk uploaded"))
+            {
+                // This means some upload error occurred
+                // Set value to null, so the form won't try to save the file
+                $('#'+elementId).val("");
+                $("#" + elementId + "_uploaded_status").html(message + ' Error while uploading - please re-upload this file');
+            }
+            else {
+                $('#'+elementId).val(message);
+                $("#" + elementId + "_uploaded_status").html(message + ' Uploaded');
+            }
+
+            $("form").removeClass(elementId + "_disabled");
+        });
+
+        r.on('fileError', function(file, message) {
+            $("#" + elementId + "_uploaded_status").html(message);
+        });
+
+        r.on('progress', function(file, message) {
+            if (isPaused) {
+                return; // Don't update UI when paused
+            }
+            let progress = r.progress();
+            if(progress==0)
+            {
+                // Don't show 0 if there is any progress but server does not report actual progress
+                progress=0.05;
+            }
+            $("#" + elementId + "_uploaded_status").html(' Uploading... ' + '(' + Math.floor(progress *100) + '%' + ')');
+            $('#' + elementId + '_progress').val(progress);
+        });
 
       }
 
-      //fire on DOMReady
+      // fire on DOMReady
       $(function(){
-          {% comment %}
-          id here is the one that is known upon page generation.
-          For new inlines it will be replace with a placeholder that will be updated by page js.
-          That's why we use formset:added event - to get the actual id that is generated
-          by django-admin's inlines.js code
-          {% endcomment %}
-          //FIXME: don't execute if id contains "__prefix__" - django's placeholder for id
-          setupField('{{ id }}');
+        // id here is the one that is known upon page generation.
+        // For new inlines it will be replace with a placeholder that will be updated by page js.
+        // That's why we use formset:added event - to get the actual id that is generated
+        // by django-admin's inlines.js code
+        // FIXME: don't execute if id contains "__prefix__" - django's placeholder for id
+        setupField('{{ id }}');
       });
 
-      //should be set up once
-      if(!djangoAdminResumableFieldListenerSetUp)
-      {
-          //setup admin inline creation listener so we can get the id of created fields instead
-          // of a placeholder stored in { id } for new fields
-          $(document).on('formset:added', function(event, $row, formsetName) {
-              //check if there are resumable fields and set them up with their actual ids
-              $row.find('input.django-admin-resumable-file').each(
-                  function () {
-                      let el = $(this);
-                      let strippedId = el.attr('id').replace('_input_file', '');
-                      setupField(strippedId)
-                  }
-              )
-          });
+      // should be set up once
+      if(!djangoAdminResumableFieldListenerSetUp){
+        // setup admin inline creation listener so we can get the id of created fields instead
+        // of a placeholder stored in { id } for new fields
+        $(document).on('formset:added', function(event, $row, formsetName) {
+            //check if there are resumable fields and set them up with their actual ids
 
-          djangoAdminResumableFieldListenerSetUp = true;
+            $row.find('input.django-admin-resumable-file').each(
+                function () {
+                    let el = $(this);
+                    let strippedId = el.attr('id').replace('_input_file', '');
+                    setupField(strippedId)
+                }
+            )
+        });
+
+        djangoAdminResumableFieldListenerSetUp = true;
       }
 
   })(typeof django !== "undefined" ? django.jQuery : jQuery);
 </script>
-<div id="container">
+<div id="file-upload-container">
   <p class="file-upload">
     {% if value %} {% trans 'Currently' %}: {% if file_url %}
     <a id="{{ id }}_link" target="_new" href="{{ file_url }}"
@@ -127,21 +171,81 @@
     {% endif %} {% else %} {{ value }} {% endif %} {{ clear_checkbox }}
     <br />
     {% trans 'Change' %}: {% endif %}
+  </p>
 
-    <span id="{{ id }}_uploaded_status"></span>
+  <div class="mb-3">
+    <label for="{{ id }}_input_file" style="display: none">File upload:</label>
     <input
       type="file"
       name="{{ id }}_input_file"
       id="{{ id }}_input_file"
-      class="django-admin-resumable-file"
+      value="{{ value }}"
+      style="color: transparent"
     />
-  </p>
-  <progress
-    id="{{ id }}_progress"
-    value="0"
-    max="1"
-    style="width: 500px"
-  ></progress>
+  </div>
+
+  <span
+    id="{{ id }}_file_name"
+    style="display: none; margin-left: 10px; font-weight: 500"
+  ></span>
+
+  <div style="display: flex; gap: 10px; align-items: center">
+    <span
+      style="
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+      "
+    >
+      <progress
+        id="{{ id }}_progress"
+        value="0"
+        max="1"
+        style="width: 500px; height: 20px; display: none"
+      ></progress>
+      <span id="{{ id }}_uploaded_status"></span>
+    </span>
+    <button
+      type="button"
+      style="
+        display: none;
+        background: red;
+        border: none;
+        border-radius: 4px;
+        color: white;
+      "
+      id="{{ id }}_cancel"
+    >
+      Cancel upload
+    </button>
+    <button
+      type="button"
+      style="
+        display: none;
+        background: #97aec8;
+        border: none;
+        border-radius: 4px;
+        color: white;
+      "
+      id="{{ id }}_pause"
+    >
+      Pause upload
+    </button>
+    <button
+      type="button"
+      style="
+        display: none;
+        background: #97aec8;
+        border: none;
+        border-radius: 4px;
+        color: white;
+      "
+      id="{{ id }}_resume"
+    >
+      Resume upload
+    </button>
+  </div>
 </div>
 
 <input type="hidden" name="{{ name }}" id="{{ id }}" value="{{ value }}" />
