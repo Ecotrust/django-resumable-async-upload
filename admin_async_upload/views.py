@@ -1,11 +1,13 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils.functional import cached_property
 from django.views.generic import View
 from admin_async_upload.files import ResumableFile
 from django.contrib.sessions.models import Session
+from django.core.files.storage import default_storage
 import threading
+import json
 
 
 SESSION_UPLOADED_FILES_KEY = 'admin_resumable_uploaded_files'
@@ -45,6 +47,42 @@ class UploadView(View):
         if r.is_complete:
             return HttpResponse(r.collect())
         return HttpResponse('chunk exists')
+    
+    def delete(self, request, *args, **kwargs):
+        """Handle file deletion via DELETE request."""
+        try:
+            # Parse the file path from request body
+            body = json.loads(request.body.decode('utf-8'))
+            file_path = body.get('file_path')
+            
+            if not file_path:
+                return JsonResponse({'error': 'file_path required'}, status=400)
+            
+            # Delete from storage
+            if default_storage.exists(file_path):
+                default_storage.delete(file_path)
+            
+            # Remove from session tracking
+            self._remove_from_tracking(request, file_path)
+            
+            return JsonResponse({'status': 'success', 'message': 'File removed'})
+        except Exception as e:
+            print(f"[ERROR]: Failed to delete file: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    def _remove_from_tracking(self, request, file_path):
+        """Remove a file from session tracking."""
+        with _session_lock:
+            if SESSION_UPLOADED_FILES_KEY in request.session:
+                tracked_files = request.session[SESSION_UPLOADED_FILES_KEY]
+                if file_path in tracked_files:
+                    tracked_files.remove(file_path)
+                    request.session[SESSION_UPLOADED_FILES_KEY] = tracked_files
+                    request.session.modified = True
+                    request.session.save()
+                    return HttpResponse('file removed')
+        return HttpResponse('file not found', status=404)
+
     def _track_uploaded_file(self, request, file_path):
         """Track uploaded files in session for cleanup if form is not saved."""
         # Use thread lock to prevent race conditions when multiple files upload simultaneously

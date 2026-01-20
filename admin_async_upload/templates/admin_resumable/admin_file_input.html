@@ -90,7 +90,10 @@
             var fileHtml = '<div id="' + fileId + '_container" style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">' +
                 '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">' +
                     '<strong style="flex: 1;">' + file.fileName + '</strong>' +
-                    '<span id="' + fileId + '_status" class="file-status" style="margin-left: 10px; color: #666;"></span>' +
+                    '<div style="display: flex; gap: 8px; align-items: center;">' +
+                        '<span id="' + fileId + '_status" class="file-status" style="color: #666;"></span>' +
+                        '<button type="button" id="' + fileId + '_cancel_btn" style="background: #dc3545; color: white; border: none; border-radius: 3px; padding: 4px 8px; cursor: pointer; font-size: 12px;">Cancel</button>' +
+                    '</div>' +
                 '</div>' +
                 '<progress id="' + fileId + '_progress" value="0" max="1" style="width: 100%; height: 20px;"></progress>' +
             '</div>';
@@ -98,7 +101,57 @@
             $('#' + elementId + '_files_list').append(fileHtml);
             $('#' + fileId + '_status').text('Waiting...');
 
-            r.upload();
+            // Store file object for later reference
+            $('#' + fileId + '_container').data('file', file);
+            $('#' + fileId + '_container').data('filePath', null); // Will be set after upload
+
+            // Add cancel button handler for this specific file
+            $('#' + fileId + '_cancel_btn').on('click', function() {
+                var filePath = $('#' + fileId + '_container').data('filePath');
+
+                // If file was uploaded, delete it from storage
+                if (filePath) {
+                    $.ajax({
+                        url: '{% url 'admin_resumable' %}',
+                        type: 'DELETE',
+                        contentType: 'application/json',
+                        headers: {
+                            'X-CSRFToken': $("input[name='csrfmiddlewaretoken']").val()
+                        },
+                        data: JSON.stringify({ file_path: filePath }),
+                        success: function() {
+                            console.log("Deleted file from storage: " + filePath);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Failed to delete file:", error);
+                        }
+                    });
+
+                    // Remove from uploadedFiles array
+                    var index = uploadedFiles.indexOf(filePath);
+                    if (index > -1) {
+                        uploadedFiles.splice(index, 1);
+                        $('#' + elementId).val(uploadedFiles.join(','));
+                    }
+                } else {
+                    // File not yet uploaded, just cancel the upload
+                    console.log("Cancelled upload: " + file.fileName);
+                }
+
+                // Remove file from Resumable.js tracking
+                file.cancel();
+                r.removeFile(file);
+
+                // Remove UI element
+                $('#' + fileId + '_container').remove();
+
+                // If no more files, hide controls and re-enable form
+                if (r.files.length === 0 || $('#' + elementId + '_files_list').children().length === 0) {
+                    $("form").removeClass(elementId + "_disabled");
+                    $("#" + elementId + "_input_file").show();
+                    $('#' + elementId + '_controls').hide();
+                }
+            });            r.upload();
 
             $("form").addClass(elementId + "_disabled");
             $("#" + elementId + "_input_file").hide();
@@ -117,6 +170,10 @@
                 uploadedFiles.push(message);
                 $('#' + fileId + '_status').html('<span style="color: green;">✓ Uploaded</span>');
                 $('#' + fileId + '_progress').val(1);
+                // Store the file path for deletion later
+                $('#' + fileId + '_container').data('filePath', message);
+                // Change cancel button to remove button after upload
+                $('#' + fileId + '_cancel_btn').text('Remove').css('background', '#6c757d');
 
                 // Update hidden input with comma-separated list of files
                 $('#' + elementId).val(uploadedFiles.join(','));
