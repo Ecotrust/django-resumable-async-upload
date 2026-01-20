@@ -36,17 +36,14 @@ class OrphanedFileCleanupMiddleware:
         """
         # Don't cleanup during upload requests
         if self._is_upload_request(request):
-            print('Not cleaning up: upload request')
             return False
         
         # Don't cleanup for AJAX requests (autocomplete, etc.)
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            print('Not cleaning up: AJAX request')
             return False
         
         # Don't cleanup if there are no files to cleanup
         if not request.session.get(SESSION_UPLOADED_FILES_KEY):
-            print('Not cleaning up: no files to cleanup')
             return False
         
         current_path = request.path
@@ -59,12 +56,10 @@ class OrphanedFileCleanupMiddleware:
             '/__debug__/',
         ]
         if any(path in current_path for path in admin_utility_paths):
-            print('Not cleaning up: admin utility path')
             return False
         
         # Don't cleanup if URL has popup parameter
         if '_popup' in request.GET or '_to_field' in request.GET:
-            print('Not cleaning up: popup or to_field parameter')
             return False
         
         referer = request.META.get('HTTP_REFERER', '')
@@ -75,15 +70,12 @@ class OrphanedFileCleanupMiddleware:
         if ('/add/' in referer or '/change/' in referer):
             if '/add/' not in current_path and '/change/' not in current_path:
                 # User left the form without saving
-                print('Cleaning up: navigated away from form')
                 return True
             else:
                 # Still on a form page (might be a popup or related form such as adding a related record)
-                print('Not cleaning up: still on form page')
                 return False
         
         # If no clear referer pattern, don't cleanup (be conservative)
-        print('Not cleaning up: no clear referer pattern')
         return False
     
     def _cleanup_orphaned_files(self, request):

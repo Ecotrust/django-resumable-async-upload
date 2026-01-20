@@ -24,6 +24,8 @@ class UploadView(View):
     def post(self, request, *args, **kwargs):
         chunk = request.FILES.get('file')
         r = ResumableFile(self.model_upload_field, user=request.user, params=request.POST)
+        print("Processing chunk in POST request:", r.current_chunk_name)
+        print("Chunk exists:", r.chunk_exists)
         if not r.chunk_exists:
             r.process_chunk(chunk)
         if r.is_complete:
@@ -35,6 +37,8 @@ class UploadView(View):
 
     def get(self, request, *args, **kwargs):
         r = ResumableFile(self.model_upload_field, user=request.user, params=request.GET)
+        print("Checking chunk in GET request:", r.current_chunk_name)
+        print("Chunk exists:", r.chunk_exists)
         if not r.chunk_exists:
             return HttpResponse('chunk not found', status=204)
         if r.is_complete:

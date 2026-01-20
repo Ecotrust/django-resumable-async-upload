@@ -33,7 +33,7 @@ class ResumableBaseWidget(FileInput):
         simultaneous_uploads = getattr(settings, 'ADMIN_SIMULTANEOUS_UPLOADS', 3)
 
         content_type_id = ContentType.objects.get_for_model(self.attrs['model']).id
-
+        max_files = self.attrs.get('max_files', None)
         context = {
             'name': name,
             'value': value,
@@ -45,6 +45,7 @@ class ResumableBaseWidget(FileInput):
             'file_url': file_url,
             'file_name': file_name,
             'simultaneous_uploads': simultaneous_uploads,
+            'max_files': max_files,
         }
 
         instance = self.attrs.get('instance')

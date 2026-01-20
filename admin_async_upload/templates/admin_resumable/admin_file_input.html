@@ -27,7 +27,7 @@
         var r = new Resumable({
             target: '{% url 'admin_resumable' %}',
             chunkSize: {{ chunk_size }},
-            maxFiles: 1,
+            maxFiles: {% if max_files %}{{ max_files }}{% else %}undefined{% endif %}, // undefined means unlimited
             query: {
                 csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(),
                 field_name: '{{ field_name }}',                 {# FIXME: this probably should be checked at run time for added inlines #}
@@ -38,17 +38,14 @@
         });
 
         var isPaused = false;
+        var uploadedFiles = [];
 
         $('#' + elementId + '_cancel').on('click', function() {
             r.cancel();
             isPaused = false;
             console.log("Upload cancelled");
-            $("#" + elementId + "_uploaded_status").html('Upload cancelled');
+            $('#' + elementId + '_files_list').empty();
             $("#" + elementId + "_input_file").show();
-            $('#' + elementId + '_progress').hide();
-            $('#' + elementId + '_cancel').hide();
-            $('#' + elementId + '_pause').hide();
-            $('#' + elementId + '_resume').hide();
             $("form").removeClass(elementId + "_disabled");
         });
 
@@ -57,7 +54,11 @@
                 isPaused = true;
                 r.pause();
                 console.log("Upload paused");
-                $("#" + elementId + "_uploaded_status").html('Upload paused');
+                $('.file-status').each(function() {
+                    if ($(this).text().includes('Uploading')) {
+                        $(this).text($(this).text().replace('Uploading', 'Paused'));
+                    }
+                });
                 $('#' + elementId + '_pause').hide();
                 $('#' + elementId + '_resume').show();
             }
@@ -68,7 +69,11 @@
                 isPaused = false;
                 r.upload();
                 console.log("Upload resumed");
-                $("#" + elementId + "_uploaded_status").html('Resuming upload... ');
+                $('.file-status').each(function() {
+                    if ($(this).text().includes('Paused')) {
+                        $(this).text($(this).text().replace('Paused', 'Uploading'));
+                    }
+                });
                 $('#' + elementId + '_resume').hide();
                 $('#' + elementId + '_pause').show();
             }
@@ -76,55 +81,68 @@
 
         r.assignBrowse($('#' + elementId + '_input_file'));
         r.on('fileAdded', function(file) {
+            console.log("File added: " + file.fileName);
+
+            // Create a unique ID for this file
+            var fileId = elementId + '_file_' + file.uniqueIdentifier;
+
+            // Add file item to the list
+            var fileHtml = '<div id="' + fileId + '_container" style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">' +
+                    '<strong style="flex: 1;">' + file.fileName + '</strong>' +
+                    '<span id="' + fileId + '_status" class="file-status" style="margin-left: 10px; color: #666;"></span>' +
+                '</div>' +
+                '<progress id="' + fileId + '_progress" value="0" max="1" style="width: 100%; height: 20px;"></progress>' +
+            '</div>';
+
+            $('#' + elementId + '_files_list').append(fileHtml);
+            $('#' + fileId + '_status').text('Waiting...');
+
             r.upload();
-            $("#" + elementId + "_uploaded_status").html(file.fileName + ' Uploading... ');
+
             $("form").addClass(elementId + "_disabled");
             $("#" + elementId + "_input_file").hide();
-            $('#' + elementId + '_progress').show();
-            $('#' + elementId + '_cancel').show();
-            $('#' + elementId + '_pause').show();
+            $('#' + elementId + '_controls').show();
         });
 
         r.on('fileSuccess', function(file, message) {
-            // Hide progress bar and cancel/pause/resume buttons. show file input again
-            $('#' + elementId + '_progress').hide();
-            $('#' + elementId + '_cancel').hide();
-            $('#' + elementId + '_pause').hide();
-            $('#' + elementId + '_resume').hide();
-            $("#" + elementId + "_input_file").show();
+            console.log("File uploaded: " + file.fileName);
+            var fileId = elementId + '_file_' + file.uniqueIdentifier;
 
             // Check that the name of the file is returned and not "chunk uploaded"
-            if(message.toLowerCase().includes("chunk uploaded"))
-            {
-                // This means some upload error occurred
-                // Set value to null, so the form won't try to save the file
-                $('#'+elementId).val("");
-                $("#" + elementId + "_uploaded_status").html(message + ' Error while uploading - please re-upload this file');
-            }
-            else {
-                $('#'+elementId).val(message);
-                $("#" + elementId + "_uploaded_status").html(message + ' Uploaded');
+            if(message.toLowerCase().includes("chunk uploaded")) {
+                $('#' + fileId + '_status').html('<span style="color: red;">Error - please re-upload</span>');
+                $('#' + fileId + '_progress').val(0);
+            } else {
+                uploadedFiles.push(message);
+                $('#' + fileId + '_status').html('<span style="color: green;">✓ Uploaded</span>');
+                $('#' + fileId + '_progress').val(1);
+
+                // Update hidden input with comma-separated list of files
+                $('#' + elementId).val(uploadedFiles.join(','));
             }
 
-            $("form").removeClass(elementId + "_disabled");
+            // Check if all files are complete
+            if (r.files.length === uploadedFiles.length) {
+                $("form").removeClass(elementId + "_disabled");
+                $("#" + elementId + "_input_file").show();
+                $('#' + elementId + '_controls').hide();
+            }
         });
 
         r.on('fileError', function(file, message) {
-            $("#" + elementId + "_uploaded_status").html(message);
+            var fileId = elementId + '_file_' + file.uniqueIdentifier;
+            $('#' + fileId + '_status').html('<span style="color: red;">Error: ' + message + '</span>');
         });
 
-        r.on('progress', function(file, message) {
+        r.on('fileProgress', function(file) {
             if (isPaused) {
                 return; // Don't update UI when paused
             }
-            let progress = r.progress();
-            if(progress==0)
-            {
-                // Don't show 0 if there is any progress but server does not report actual progress
-                progress=0.05;
-            }
-            $("#" + elementId + "_uploaded_status").html(' Uploading... ' + '(' + Math.floor(progress *100) + '%' + ')');
-            $('#' + elementId + '_progress').val(progress);
+            var fileId = elementId + '_file_' + file.uniqueIdentifier;
+            var progress = file.progress();
+            $('#' + fileId + '_progress').val(progress);
+            $('#' + fileId + '_status').text('Uploading... ' + Math.floor(progress * 100) + '%');
         });
 
       }
@@ -179,58 +197,52 @@
       type="file"
       name="{{ id }}_input_file"
       id="{{ id }}_input_file"
+      class="django-admin-resumable-file"
       value="{{ value }}"
       style="color: transparent"
+      {%
+      if
+      max_files
+      !="1"
+      %}multiple{%
+      endif
+      %}
     />
   </div>
 
-  <span
-    id="{{ id }}_file_name"
-    style="display: none; margin-left: 10px; font-weight: 500"
-  ></span>
+  <div id="{{ id }}_files_list" style="margin-bottom: 15px"></div>
 
-  <div style="display: flex; gap: 10px; align-items: center">
-    <span
-      style="
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        align-items: flex-start;
-      "
-    >
-      <progress
-        id="{{ id }}_progress"
-        value="0"
-        max="1"
-        style="width: 500px; height: 20px; display: none"
-      ></progress>
-      <span id="{{ id }}_uploaded_status"></span>
-    </span>
+  <div
+    id="{{ id }}_controls"
+    style="display: none; gap: 10px; margin-bottom: 15px"
+  >
     <button
       type="button"
       style="
-        display: none;
         background: red;
         border: none;
         border-radius: 4px;
         color: white;
+        padding: 8px 16px;
+        cursor: pointer;
       "
       id="{{ id }}_cancel"
     >
-      Cancel upload
+      Cancel All
     </button>
     <button
       type="button"
       style="
-        display: none;
         background: #97aec8;
         border: none;
         border-radius: 4px;
         color: white;
+        padding: 8px 16px;
+        cursor: pointer;
       "
       id="{{ id }}_pause"
     >
-      Pause upload
+      Pause All
     </button>
     <button
       type="button"
@@ -240,12 +252,13 @@
         border: none;
         border-radius: 4px;
         color: white;
+        padding: 8px 16px;
+        cursor: pointer;
       "
       id="{{ id }}_resume"
     >
-      Resume upload
+      Resume All
     </button>
   </div>
+  <input type="hidden" name="{{ name }}" id="{{ id }}" value="{{ value }}" />
 </div>
-
-<input type="hidden" name="{{ name }}" id="{{ id }}" value="{{ value }}" />
