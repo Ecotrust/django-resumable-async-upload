@@ -87,7 +87,7 @@ class OrphanedFileCleanupMiddleware:
         if orphaned_files:
             storage = default_storage
             # Copy the list to avoid issues during iteration
-            files_to_delete = orphaned_files[:]
+            files_to_delete = orphaned_files.copy()
             for file_path in files_to_delete:
                 try:
                     if storage.exists(file_path):

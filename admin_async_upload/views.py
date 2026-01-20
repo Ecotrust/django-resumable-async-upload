@@ -4,9 +4,14 @@ from django.http import HttpResponse
 from django.utils.functional import cached_property
 from django.views.generic import View
 from admin_async_upload.files import ResumableFile
+from django.contrib.sessions.models import Session
+import threading
 
 
 SESSION_UPLOADED_FILES_KEY = 'admin_resumable_uploaded_files'
+
+# Thread lock to prevent race conditions when multiple files upload simultaneously
+_session_lock = threading.Lock()
 
 
 class UploadView(View):
@@ -24,8 +29,6 @@ class UploadView(View):
     def post(self, request, *args, **kwargs):
         chunk = request.FILES.get('file')
         r = ResumableFile(self.model_upload_field, user=request.user, params=request.POST)
-        print("Processing chunk in POST request:", r.current_chunk_name)
-        print("Chunk exists:", r.chunk_exists)
         if not r.chunk_exists:
             r.process_chunk(chunk)
         if r.is_complete:
@@ -37,21 +40,40 @@ class UploadView(View):
 
     def get(self, request, *args, **kwargs):
         r = ResumableFile(self.model_upload_field, user=request.user, params=request.GET)
-        print("Checking chunk in GET request:", r.current_chunk_name)
-        print("Chunk exists:", r.chunk_exists)
         if not r.chunk_exists:
             return HttpResponse('chunk not found', status=204)
         if r.is_complete:
             return HttpResponse(r.collect())
         return HttpResponse('chunk exists')
-
     def _track_uploaded_file(self, request, file_path):
         """Track uploaded files in session for cleanup if form is not saved."""
-        if SESSION_UPLOADED_FILES_KEY not in request.session:
-            request.session[SESSION_UPLOADED_FILES_KEY] = []
-        if file_path not in request.session[SESSION_UPLOADED_FILES_KEY]:
-            request.session[SESSION_UPLOADED_FILES_KEY].append(file_path)
-            request.session.modified = True
+        # Use thread lock to prevent race conditions when multiple files upload simultaneously
+        with _session_lock:
+            # Ensure session is loaded and has a session key
+            if not request.session.session_key:
+                request.session.create()
+            
+            session_key = request.session.session_key
+            
+            # Force reload from database by getting a fresh session instance
+            try:
+                session_obj = Session.objects.get(session_key=session_key)
+                session_data = session_obj.get_decoded()
+            except Session.DoesNotExist:
+                session_data = {}
+            
+            # Get or initialize the tracked files list from fresh data
+            tracked_files = session_data.get(SESSION_UPLOADED_FILES_KEY, [])
+            
+            if file_path not in tracked_files:
+                tracked_files.append(file_path)
+                # Update the session with new data
+                request.session[SESSION_UPLOADED_FILES_KEY] = tracked_files
+                request.session.modified = True
+                # Force save to ensure persistence across multiple uploads
+                request.session.save()
+            else:
+                print("File already tracked:", file_path)
 
 
 admin_resumable = login_required(UploadView.as_view())
