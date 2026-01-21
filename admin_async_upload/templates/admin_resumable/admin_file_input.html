@@ -96,6 +96,7 @@
                     '</div>' +
                 '</div>' +
                 '<progress id="' + fileId + '_progress" value="0" max="1" style="width: 100%; height: 20px;"></progress>' +
+                '<div id="' + fileId + '_preview" style="margin-top: 10px;"></div>' +
             '</div>';
 
             $('#' + elementId + '_files_list').append(fileHtml);
@@ -182,6 +183,14 @@
 
                 // Update hidden input with comma-separated list of files
                 $('#' + elementId).val(uploadedFiles.join(','));
+
+                // Display image preview if it's an image file
+                var fileType = file.file.type;
+                if (fileType && fileType.startsWith('image/') && {{ show_thumb|yesno:"true,false" }} && {% if MEDIA_URL %}true{% else %}false{% endif %} ) {
+                    var imageUrl = '{{ MEDIA_URL }}' + message;
+                    var imgHtml = '<img src="' + imageUrl + '" style="max-width: 300px; max-height: 300px; border-radius: 4px; margin-top: 5px;" />';
+                    $('#' + fileId + '_preview').html(imgHtml);
+                }
             }
 
             // Check if all files are complete

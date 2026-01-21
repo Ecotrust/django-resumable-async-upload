@@ -49,12 +49,14 @@ class OrphanedFileCleanupMiddleware:
         if not request.session.get(SESSION_UPLOADED_FILES_KEY):
             return False
         
-        # Don't cleanup for Django admin utility endpoints
+        # Don't cleanup for Django admin utility endpoints or media files
         admin_utility_paths = [
             '/jsi18n/',
             '/autocomplete/',
             '/select2/',
             '/__debug__/',
+            '/media/',
+            '/static/',
         ]
         if any(path in current_path for path in admin_utility_paths):
             return False

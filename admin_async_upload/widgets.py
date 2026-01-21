@@ -31,9 +31,11 @@ class ResumableBaseWidget(FileInput):
         chunk_size = getattr(settings, 'ADMIN_RESUMABLE_CHUNKSIZE', "1*1024*1024")
         show_thumb = getattr(settings, 'ADMIN_RESUMABLE_SHOW_THUMB', False)
         simultaneous_uploads = getattr(settings, 'ADMIN_SIMULTANEOUS_UPLOADS', 3)
+        media_url = getattr(settings, 'MEDIA_URL', None)
+        max_files = self.attrs.get('max_files', None)
 
         content_type_id = ContentType.objects.get_for_model(self.attrs['model']).id
-        max_files = self.attrs.get('max_files', None)
+        
         context = {
             'name': name,
             'value': value,
@@ -46,6 +48,7 @@ class ResumableBaseWidget(FileInput):
             'file_name': file_name,
             'simultaneous_uploads': simultaneous_uploads,
             'max_files': max_files,
+            'MEDIA_URL': media_url,
         }
 
         instance = self.attrs.get('instance')
