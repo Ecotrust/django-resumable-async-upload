@@ -27,13 +27,16 @@ class OrphanedFileCleanupMiddleware:
     
     def _is_upload_request(self, request):
         """Check if this is an AJAX upload request (not a form save)."""
-        return 'admin_resumable' in request.path
+        # Check for both possible URL patterns (admin_resumable or admin_async_upload)
+        return 'admin_resumable' in request.path or 'admin_async_upload/upload' in request.path
     
     def _should_cleanup(self, request):
         """
         Determine if we should cleanup orphaned files.
         Only cleanup when user is truly leaving the form, not during form editing.
         """
+        current_path = request.path
+        
         # Don't cleanup during upload requests
         if self._is_upload_request(request):
             return False
@@ -45,8 +48,6 @@ class OrphanedFileCleanupMiddleware:
         # Don't cleanup if there are no files to cleanup
         if not request.session.get(SESSION_UPLOADED_FILES_KEY):
             return False
-        
-        current_path = request.path
         
         # Don't cleanup for Django admin utility endpoints
         admin_utility_paths = [
@@ -66,7 +67,6 @@ class OrphanedFileCleanupMiddleware:
         
         # If referer contains /add/ or /change/ and current path doesn't,
         # then the user must be navigating away from the form
-        print(f"Referer: {referer}, Current Path: {current_path}")
         if ('/add/' in referer or '/change/' in referer):
             if '/add/' not in current_path and '/change/' not in current_path:
                 # User left the form without saving

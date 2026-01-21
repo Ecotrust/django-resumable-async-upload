@@ -151,7 +151,9 @@
                     $("#" + elementId + "_input_file").show();
                     $('#' + elementId + '_controls').hide();
                 }
-            });            r.upload();
+            });
+
+            r.upload();
 
             $("form").addClass(elementId + "_disabled");
             $("#" + elementId + "_input_file").hide();
@@ -167,7 +169,10 @@
                 $('#' + fileId + '_status').html('<span style="color: red;">Error - please re-upload</span>');
                 $('#' + fileId + '_progress').val(0);
             } else {
-                uploadedFiles.push(message);
+                // Only add if not already in the array
+                if (uploadedFiles.indexOf(message) === -1) {
+                    uploadedFiles.push(message);
+                }
                 $('#' + fileId + '_status').html('<span style="color: green;">✓ Uploaded</span>');
                 $('#' + fileId + '_progress').val(1);
                 // Store the file path for deletion later
@@ -193,13 +198,13 @@
         });
 
         r.on('fileProgress', function(file) {
-            if (isPaused) {
-                return; // Don't update UI when paused
-            }
             var fileId = elementId + '_file_' + file.uniqueIdentifier;
             var progress = file.progress();
             $('#' + fileId + '_progress').val(progress);
-            $('#' + fileId + '_status').text('Uploading... ' + Math.floor(progress * 100) + '%');
+
+            if (!isPaused) {
+                $('#' + fileId + '_status').text('Uploading... ' + Math.floor(progress * 100) + '%');
+            }
         });
 
       }
