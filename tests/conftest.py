@@ -3,14 +3,16 @@ import os
 from selenium import webdriver
 
 browsers = {
-    "firefox": webdriver.Firefox,
+    "chrome": webdriver.Chrome,
+    #"firefox": webdriver.Firefox,
     #'PhantomJS': webdriver.PhantomJS,
-    #'chrome': webdriver.Chrome,
 }
 
-browser_options = {"firefox": webdriver.FirefoxOptions()}
+browser_options = {"chrome": webdriver.ChromeOptions()}
 
-browser_options["firefox"].add_argument("--headless")
+browser_options["chrome"].add_argument("--headless")
+browser_options["chrome"].add_argument("--no-sandbox")
+browser_options["chrome"].add_argument("--disable-dev-shm-usage")
 
 
 @pytest.fixture(scope="session", params=browsers.keys())
@@ -30,7 +32,7 @@ def pytest_configure():
         DEBUG=False,
         DEBUG_PROPAGATE_EXCEPTIONS=True,
         DATABASES={
-            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": "test_db.sqlite3"}
         },
         SITE_ID=1,
         SECRET_KEY="not very secret in tests",
@@ -38,6 +40,7 @@ def pytest_configure():
         USE_L10N=True,
         STATIC_URL="/static/",
         ROOT_URLCONF="tests.urls",
+        LOGIN_URL="/admin/login/",
         TEMPLATE_LOADERS=(
             "django.template.loaders.filesystem.Loader",
             "django.template.loaders.app_directories.Loader",

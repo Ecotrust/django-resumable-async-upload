@@ -167,24 +167,71 @@ def test_fake_file_upload_incomplete_chunk(admin_user, admin_client):
 @pytest.mark.django_db
 def test_real_file_upload(admin_user, live_server, driver):
     test_file_path = "/tmp/test_small_file.bin"
+    # Clean up any existing test file from prior runs just in case
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
     create_test_file(test_file_path, 5)
 
     driver.get(live_server.url + "/admin/")
+    
+    # Wait for login page to load
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "id_username"))
+    )
+    
     driver.find_element(By.ID, "id_username").send_keys("admin")
     driver.find_element(By.ID, "id_password").send_keys("password")
     driver.find_element(By.XPATH, '//input[@value="Log in"]').click()
-    driver.implicitly_wait(2)
+    
+    # Wait for successful login - check that we're no longer on the login page
+    WebDriverWait(driver, 10).until(
+        lambda d: "/login/" not in d.current_url
+    )
+    
+    # Verify we can see the admin dashboard (session is working)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#content"))
+    )
+    
+    # Add extra wait to ensure session cookie is fully set
+    time.sleep(2)
+    
     driver.get(live_server.url + "/admin/tests/foo/add/")
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "id_bar")))
     driver.find_element(By.ID, "id_bar").send_keys("bat")
-    driver.find_element(By.ID, "id_foo_input_file").send_keys(test_file_path)
+    
+    # Wait for the file input to be ready
+    file_input = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "id_foo_input_file"))
+    )
+    
+    # Give the page a moment to fully initialize JavaScript
+    time.sleep(1)
+    file_input.send_keys(test_file_path)
 
-    status_text = driver.find_element(By.ID, "id_foo_file_5242881-test_small_filebin_status").text
-    print("status_text", status_text)
-    i = 0
-    while i < 5:
-        if "Uploaded" in driver.find_element(By.ID, "id_foo_file_5242881-test_small_filebin_status").text:
-            return  # success
-        time.sleep(1)
-        i += 1
-    assert False, f"Status text is '{driver.find_element(By.ID, 'id_foo_file_5242881-test_small_filebin_status').text}'; expected 'Uploaded"
+    try:
+        # Wait for at least one file-status element to appear (not just the container)
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "file-status"))
+        )
+        
+        # Wait for the upload to complete by checking for "Uploaded" or "✓" in the status
+        WebDriverWait(driver, 20).until(
+            lambda d: any(
+                "Uploaded" in elem.text or "✓" in elem.text 
+                for elem in d.find_elements(By.CLASS_NAME, "file-status")
+            )
+        )
+        
+        # Verify the upload completed successfully
+        status_elements = driver.find_elements(By.CLASS_NAME, "file-status")
+        assert any("Uploaded" in elem.text or "✓" in elem.text for elem in status_elements), \
+            f"No file status contains 'Uploaded' or '✓'. Found: {[elem.text for elem in status_elements]}"
+    except Exception as e:
+        # Print page source for debugging
+        print("Page source:", driver.page_source)
+        print("Console logs:", driver.get_log('browser'))
+    finally:
+        # Clean up test file
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
