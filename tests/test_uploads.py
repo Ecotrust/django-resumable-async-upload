@@ -357,8 +357,7 @@ def test_real_file_upload_cancel_single_file(admin_user, live_server, driver):
         assert len(driver.find_elements(By.CLASS_NAME, "file-status")) > 0
 
         # Click the cancel button for the first file
-        cancel_button = driver.find_element(By.CLASS_NAME, "cancel-btn")
-        print("Clicking cancel button:", cancel_button)
+        cancel_button = driver.find_element(By.CLASS_NAME, "file-cancel-btn")
         cancel_button.click()
         
         # Wait a moment to allow cancellation to process
