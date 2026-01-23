@@ -231,6 +231,74 @@ def test_real_file_upload(admin_user, live_server, driver):
         # Print page source for debugging
         print("Page source:", driver.page_source)
         print("Console logs:", driver.get_log('browser'))
+        raise
+    finally:
+        # Clean up test file
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
+
+@pytest.mark.django_db
+def test_real_file_upload_cancel_single_file(admin_user, live_server, driver):
+    test_file_path = "/tmp/test_small_file_cancel.bin"
+    # Clean up any existing test file from prior runs just in case
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
+    create_test_file(test_file_path, 5)
+
+    driver.get(live_server.url + "/admin/")
+    
+    # Wait for login page to load
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "id_username"))
+    )
+    
+    driver.find_element(By.ID, "id_username").send_keys("admin")
+    driver.find_element(By.ID, "id_password").send_keys("password")
+    driver.find_element(By.XPATH, '//input[@value="Log in"]').click()
+    
+    # Wait for successful login - check that we're no longer on the login page
+    WebDriverWait(driver, 10).until(
+        lambda d: "/login/" not in d.current_url
+    )
+    
+    # Verify we can see the admin dashboard (session is working)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#content"))
+    )
+    
+    # Add extra wait to ensure session cookie is fully set
+    time.sleep(2)
+    
+    driver.get(live_server.url + "/admin/tests/foo/add/")
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "id_foo_input_file")))
+    driver.find_element(By.ID, "id_foo_input_file").send_keys(test_file_path)
+
+    try:
+        # Wait for at least one file-status element to appear (not just the container)
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "file-status"))
+        )
+        assert len(driver.find_elements(By.CLASS_NAME, "file-status")) > 0
+
+        # Click the cancel button for the first file
+        cancel_button = driver.find_element(By.CLASS_NAME, "cancel-btn")
+        print("Clicking cancel button:", cancel_button)
+        cancel_button.click()
+        
+        # Wait a moment to allow cancellation to process
+        time.sleep(2)
+        
+        # Verify that no file status indicates completion
+        status_elements = driver.find_elements(By.CLASS_NAME, "file-status")
+
+        assert all("Uploaded" not in elem.text and "✓" not in elem.text for elem in status_elements)
+        
+        assert len(status_elements) == 0, f"Expected 0 file-status elements after cancellation, found {len(status_elements)}"
+    except Exception as e:
+        # Print page source for debugging
+        print("Page source:", driver.page_source)
+        print("Console logs:", driver.get_log('browser'))
+        raise  # Re-raise the exception so the test fails
     finally:
         # Clean up test file
         if os.path.exists(test_file_path):
