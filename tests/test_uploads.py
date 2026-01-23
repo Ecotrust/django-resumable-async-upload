@@ -464,3 +464,138 @@ def test_real_file_upload_pause_resume(admin_user, live_server, driver):
         # Clean up test file
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
+
+def test_real_file_upload_file_error(admin_user, live_server, driver):
+    test_file_path = "/tmp/test_failed_file.bin"
+    # Ensure the test file does not exist
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
+    
+    create_test_file(test_file_path, 5)
+
+    driver.get(live_server.url + "/admin/")
+    
+    # Wait for login page to load
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "id_username"))
+    )
+    
+    driver.find_element(By.ID, "id_username").send_keys("admin")
+    driver.find_element(By.ID, "id_password").send_keys("password")
+    driver.find_element(By.XPATH, '//input[@value="Log in"]').click()
+    
+    # Wait for successful login - check that we're no longer on the login page
+    WebDriverWait(driver, 10).until(
+        lambda d: "/login/" not in d.current_url
+    )
+    
+    # Verify we can see the admin dashboard (session is working)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#content"))
+    )
+    
+    # Add extra wait to ensure session cookie is fully set
+    time.sleep(2)
+    
+    driver.get(live_server.url + "/admin/tests/foo/add/")
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "id_bar")))
+    driver.find_element(By.ID, "id_bar").send_keys("bat")
+    
+    # Inject JavaScript to mock error response before file upload
+    driver.execute_script("""
+        (function() {
+            var OriginalXHR = window.XMLHttpRequest;
+            window.XMLHttpRequest = function() {
+                var xhr = new OriginalXHR();
+                var originalOpen = xhr.open;
+                var originalSend = xhr.send;
+                
+                xhr.open = function(method, url) {
+                    this._method = method;
+                    this._url = url;
+                    return originalOpen.apply(this, arguments);
+                };
+                
+                xhr.send = function(data) {
+                    var self = this;
+                    
+                    if (this._method === 'POST' && this._url.includes('admin_resumable')) {
+                        setTimeout(function() {
+                            
+                            // Set status and readyState
+                            Object.defineProperty(self, 'status', { 
+                                writable: true, 
+                                configurable: true,
+                                value: 500 
+                            });
+                            Object.defineProperty(self, 'readyState', { 
+                                writable: true, 
+                                configurable: true,
+                                value: 4 
+                            });
+                            Object.defineProperty(self, 'responseText', { 
+                                writable: true, 
+                                configurable: true,
+                                value: 'Internal Server Error' 
+                            });
+            
+                            // Trigger all possible event handlers
+                            var event = new Event('load');
+                            
+                            if (self.onreadystatechange) {
+                                self.onreadystatechange(event);
+                            }
+                            if (self.onload) {
+                                self.onload(event);
+                            }
+                            
+                            self.dispatchEvent(event);
+                            
+                        }, 100);
+                        return;
+                    }
+                    return originalSend.call(this, data);
+                };
+                
+                return xhr;
+            };
+        })();
+        
+    """)
+    
+    # Wait for the file input to be ready
+    file_input = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "id_foo_input_file"))
+    )
+
+    # Give the page a moment to fully initialize JavaScript
+    time.sleep(1)
+    
+    file_input.send_keys(test_file_path)
+
+    try:
+        # Wait for the file-status element to appear with error
+        WebDriverWait(driver, 20).until(
+            lambda d: any(
+                "Error" in elem.text
+                for elem in d.find_elements(By.CLASS_NAME, "file-status")
+            )
+        )
+        
+        # Verify error message is displayed
+        status_elements = driver.find_elements(By.CLASS_NAME, "file-status")
+
+        assert any("Error" in elem.text for elem in status_elements), \
+            f"No file status contains 'Error'. Found: {[elem.text for elem in status_elements]}"
+        
+        
+    except Exception as e:
+        # Print page source for debugging
+        print("Page source:", driver.page_source)
+        print("Console logs:", driver.get_log('browser'))
+
+    finally:
+        # Clean up test file
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
+
