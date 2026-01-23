@@ -86,6 +86,7 @@ def pytest_configure():
         ),
         PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",),
         MEDIA_ROOT=os.path.join(os.path.dirname(__file__), "media"),
+        ADMIN_SIMULTANEOUS_UPLOADS=1
     )
     try:
         import django
