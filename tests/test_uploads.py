@@ -375,3 +375,75 @@ def test_real_file_upload_cancel_all_files(admin_user, live_server, driver):
         # Clean up test file
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
+
+@pytest.mark.django_db
+def test_real_file_upload_pause_resume(admin_user, live_server, driver):
+    test_file_path = "/tmp/test_large_file_cancel_all.bin"
+    # Clean up any existing test file from prior runs just in case
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
+    # Use a larger file (50MB) to ensure we have time to click pause before upload completes
+    create_test_file(test_file_path, 50)
+
+    driver.get(live_server.url + "/admin/")
+    
+    # Wait for login page to load
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "id_username"))
+    )
+    
+    driver.find_element(By.ID, "id_username").send_keys("admin")
+    driver.find_element(By.ID, "id_password").send_keys("password")
+    driver.find_element(By.XPATH, '//input[@value="Log in"]').click()
+    
+    # Wait for successful login - check that we're no longer on the login page
+    WebDriverWait(driver, 10).until(
+        lambda d: "/login/" not in d.current_url
+    )
+    
+    # Verify we can see the admin dashboard (session is working)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#content"))
+    )
+    
+    # Add extra wait to ensure session cookie is fully set
+    time.sleep(2)
+    
+    driver.get(live_server.url + "/admin/tests/foo/add/")
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "id_foo_input_file")))
+    driver.find_element(By.ID, "id_foo_input_file").send_keys(test_file_path)
+
+    try:
+        # Wait for at least one file-status element to appear (not just the container)
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "file-status"))
+        )
+        
+        # Pause the upload
+        pause_button = driver.find_element(By.ID, "id_foo_pause")
+        pause_button.click()
+        print("Clicked pause button.")
+        
+        # Wait a moment to ensure upload is paused
+        time.sleep(2)
+        
+        # Resume the upload
+        resume_button = driver.find_element(By.ID, "id_foo_resume")
+        resume_button.click()
+        
+        # Wait for the upload to complete by checking for "Uploaded" or "✓" in the status
+        WebDriverWait(driver, 20).until(
+            lambda d: any(
+                "Uploaded" in elem.text or "✓" in elem.text 
+                for elem in d.find_elements(By.CLASS_NAME, "file-status")
+            )
+        )
+    except Exception as e:
+        # Print page source for debugging
+        print("Page source:", driver.page_source)
+        print("Console logs:", driver.get_log('browser'))
+        raise  # Re-raise the exception so the test fails
+    finally:
+        # Clean up test file
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
