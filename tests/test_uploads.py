@@ -418,14 +418,21 @@ def test_real_file_upload_pause_resume(admin_user, live_server, driver):
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CLASS_NAME, "file-status"))
         )
-        
+
+        progress_bar_before_pause = driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value")
+
         # Pause the upload
         pause_button = driver.find_element(By.ID, "id_foo_pause")
         pause_button.click()
-        print("Clicked pause button.")
         
         # Wait a moment to ensure upload is paused
         time.sleep(2)
+
+        progress_bar_during_pause = driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value")
+        
+        # Verify that the upload is greater than 0% but less than 100%
+        assert progress_bar_during_pause >  progress_bar_before_pause, \
+            f"Upload did not progress before pause. Before: {progress_bar_before_pause}, During: {progress_bar_during_pause}"
         
         # Resume the upload
         resume_button = driver.find_element(By.ID, "id_foo_resume")
@@ -438,6 +445,16 @@ def test_real_file_upload_pause_resume(admin_user, live_server, driver):
                 for elem in d.find_elements(By.CLASS_NAME, "file-status")
             )
         )
+        progress_bar_after_resume = driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value")
+
+        # Verify that upload progressed after resume
+        assert progress_bar_after_resume > progress_bar_during_pause, \
+            f"Upload did not progress after resume. During: {progress_bar_during_pause}, After: {progress_bar_after_resume}"
+        
+        # Verify that upload reached 100%
+        assert progress_bar_after_resume == "1", \
+            f"Upload did not complete after resume. Final progress: {progress_bar_after_resume}"
+
     except Exception as e:
         # Print page source for debugging
         print("Page source:", driver.page_source)
