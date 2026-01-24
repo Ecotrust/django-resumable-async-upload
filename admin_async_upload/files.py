@@ -4,6 +4,7 @@ import tempfile
 
 from django.core.files import File
 from django.utils.functional import cached_property
+from django.conf import settings
 
 from admin_async_upload.storage import ResumableStorage
 
@@ -24,6 +25,7 @@ class ResumableFile(object):
         self.user = user
         self.params = params
         self.chunk_suffix = "_part_"
+        self.chunk_folder = getattr(settings, 'ADMIN_RESUMABLE_CHUNK_FOLDER', '')
 
     @cached_property
     def resumable_storage(self):
@@ -61,24 +63,34 @@ class ResumableFile(object):
     @property
     def chunk_names(self):
         """
-        Iterates over all stored chunks.
+        Iterates over all stored chunks in the configured chunk folder.
         """
         chunks = []
-        files = sorted(self.chunk_storage.listdir('')[1])
+        try:
+            files = sorted(self.chunk_storage.listdir(self.chunk_folder)[1])
+        except (FileNotFoundError, OSError):
+            # chunks folder doesn't exist yet
+            return chunks
         for file in files:
             if fnmatch.fnmatch(file, '%s%s*' % (self.filename,
                                                 self.chunk_suffix)):
-                chunks.append(file)
+                if self.chunk_folder:
+                    chunks.append(self.chunk_folder + '/' + file)
+                else:
+                    chunks.append(file)
         return chunks
 
     @property
     def current_chunk_name(self):
         # TODO: add user identifier to chunk name
-        return "%s%s%s" % (
+        chunk_name = "%s%s%s" % (
             self.filename,
             self.chunk_suffix,
             self.params.get('resumableChunkNumber').zfill(4)
         )
+        if self.chunk_folder:
+            return "%s/%s" % (self.chunk_folder, chunk_name)
+        return chunk_name
 
     def chunks(self):
         """
@@ -144,6 +156,10 @@ class ResumableFile(object):
         return size
 
     def collect(self):
+        """
+        Saves the complete file to persistent storage and deletes chunks.
+        Returns the actual filename in persistent storage.
+        """
         actual_filename = self.persistent_storage.save(self.storage_filename, File(self.file))
         self.delete_chunks()
         return actual_filename
