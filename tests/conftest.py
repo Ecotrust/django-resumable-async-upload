@@ -1,11 +1,10 @@
 import pytest
 import os
+import tempfile
 from selenium import webdriver
 
 browsers = {
     "chrome": webdriver.Chrome,
-    #"firefox": webdriver.Firefox,
-    #'PhantomJS': webdriver.PhantomJS,
 }
 
 browser_options = {"chrome": webdriver.ChromeOptions()}
@@ -13,6 +12,14 @@ browser_options = {"chrome": webdriver.ChromeOptions()}
 browser_options["chrome"].add_argument("--headless")
 browser_options["chrome"].add_argument("--no-sandbox")
 browser_options["chrome"].add_argument("--disable-dev-shm-usage")
+
+
+# Session-scoped fixture to create a temporary directory for test artifacts
+@pytest.fixture(scope="session")
+def test_temp_dir(tmp_path_factory):
+    """Create a temporary directory for test database and other artifacts."""
+    temp_dir = tmp_path_factory.mktemp("test_artifacts")
+    return temp_dir
 
 
 @pytest.fixture(scope="session", params=browsers.keys())
@@ -27,12 +34,16 @@ def driver(request):
 def pytest_configure():
     import django
     from django.conf import settings
+    
+    # Create a temporary directory for the test database
+    test_db_dir = tempfile.mkdtemp(prefix="django_test_")
+    test_db_path = os.path.join(test_db_dir, "test_db.sqlite3")
 
     settings.configure(
         DEBUG=False,
         DEBUG_PROPAGATE_EXCEPTIONS=True,
         DATABASES={
-            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": "test_db.sqlite3"}
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": test_db_path}
         },
         SITE_ID=1,
         SECRET_KEY="not very secret in tests",
@@ -88,9 +99,25 @@ def pytest_configure():
         MEDIA_ROOT=os.path.join(os.path.dirname(__file__), "media"),
         ADMIN_SIMULTANEOUS_UPLOADS=1
     )
+    
+    # Store the test DB directory for cleanup
+    settings.TEST_DB_DIR = test_db_dir
+    
     try:
         import django
 
         django.setup()
     except AttributeError:
         pass
+
+
+def pytest_unconfigure():
+    """Clean up temporary test database directory after all tests."""
+    import shutil
+    from django.conf import settings
+    
+    if hasattr(settings, 'TEST_DB_DIR') and os.path.exists(settings.TEST_DB_DIR):
+        try:
+            shutil.rmtree(settings.TEST_DB_DIR)
+        except Exception as e:
+            print(f"Warning: Could not clean up test DB directory: {e}")

@@ -452,13 +452,15 @@ def test_real_file_upload_cancel_all_files(admin_user, live_server, driver):
             os.unlink(test_file_path)
 
 @pytest.mark.django_db
-def test_real_file_upload_pause_resume(admin_user, live_server, driver):
+def test_real_file_upload_pause_resume(admin_user, live_server, driver, settings):
+    # Set smaller chunk size to make have more incremental progress for pause/resume testing
+    settings.ADMIN_RESUMABLE_CHUNKSIZE = "100*1024"  # 100KB chunks
     test_file_path = "/tmp/test_large_file_cancel_all.bin"
     # Clean up any existing test file from prior runs just in case
     if os.path.exists(test_file_path):
         os.unlink(test_file_path)
-    # Use a larger file (50MB) to ensure we have time to click pause before upload completes
-    create_test_file(test_file_path, 50)
+
+    create_test_file(test_file_path, 5)
 
     driver.get(live_server.url + "/admin/")
     
@@ -487,27 +489,38 @@ def test_real_file_upload_pause_resume(admin_user, live_server, driver):
     driver.get(live_server.url + "/admin/tests/foo/add/")
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "id_foo_input_file")))
     driver.find_element(By.ID, "id_foo_input_file").send_keys(test_file_path)
-
+    
     try:
         # Wait for at least one file-status element to appear (not just the container)
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CLASS_NAME, "file-status"))
         )
 
-        progress_bar_before_pause = driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value")
+        # Get initial progress value as float
+        progress_before_pause = float(driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value"))
+        
+        # Verify upload has started (progress > 0)
+        assert progress_before_pause > 0, \
+            f"Upload has not started. Progress: {progress_before_pause}"
 
         # Pause the upload
         pause_button = driver.find_element(By.ID, "id_foo_pause")
         pause_button.click()
         
-        # Wait a moment to ensure upload is paused
-        time.sleep(2)
-
-        progress_bar_during_pause = driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value")
+        # Wait a moment for pause to take effect
+        time.sleep(1)
         
-        # Verify that the upload is greater than 0% but less than 100%
-        assert progress_bar_during_pause >  progress_bar_before_pause, \
-            f"Upload did not progress before pause. Before: {progress_bar_before_pause}, During: {progress_bar_during_pause}"
+        # Get progress right after pausing
+        progress_during_pause_1 = float(driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value"))
+        
+        # Wait another moment while paused
+        time.sleep(5)
+        
+        # Get progress again to verify it hasn't increased significantly
+        progress_during_pause_2 = float(driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value"))
+        # Verify that progress has not increased while paused (allow small tolerance for timing)
+        assert abs(progress_during_pause_2 - progress_during_pause_1) < 0.05, \
+            f"Upload continued while paused. First: {progress_during_pause_1}, Second: {progress_during_pause_2}"
         
         # Resume the upload
         resume_button = driver.find_element(By.ID, "id_foo_resume")
@@ -520,15 +533,15 @@ def test_real_file_upload_pause_resume(admin_user, live_server, driver):
                 for elem in d.find_elements(By.CLASS_NAME, "file-status")
             )
         )
-        progress_bar_after_resume = driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value")
+        progress_after_resume = float(driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value"))
 
         # Verify that upload progressed after resume
-        assert progress_bar_after_resume > progress_bar_during_pause, \
-            f"Upload did not progress after resume. During: {progress_bar_during_pause}, After: {progress_bar_after_resume}"
+        assert progress_after_resume > progress_during_pause_2, \
+            f"Upload did not progress after resume. During pause: {progress_during_pause_2}, After: {progress_after_resume}"
         
         # Verify that upload reached 100%
-        assert progress_bar_after_resume == "1", \
-            f"Upload did not complete after resume. Final progress: {progress_bar_after_resume}"
+        assert progress_after_resume == 1.0, \
+            f"Upload did not complete after resume. Final progress: {progress_after_resume}"
 
     except Exception as e:
         # Print page source for debugging
