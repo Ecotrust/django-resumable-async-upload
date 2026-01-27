@@ -1,7 +1,8 @@
 import os
 from setuptools import setup
 
-README = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
+with open(os.path.join(os.path.dirname(__file__), 'README.md')) as f:
+    README = f.read()
 
 # allow setup.py to be run from any path
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
@@ -21,6 +22,7 @@ setup(
     license='MIT License',
     description='A Django app for the uploading of large files from the django admin site.',
     long_description=README,
+    long_description_content_type='text/markdown',
     url='https://github.com/Ecotrust/django-resumable-async-upload',
     author='Paige Williams',
     author_email='pwilliams@ecotrust.org',
