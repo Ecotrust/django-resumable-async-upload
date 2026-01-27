@@ -8,6 +8,12 @@ class AsyncFileField(models.FileField):
     def __init__(self, *args, **kwargs):
         self.max_files = kwargs.pop('max_files', None)
         super(AsyncFileField, self).__init__(*args, **kwargs)
+    
+    def deconstruct(self):
+        name, path, args, kwargs = super(AsyncFileField, self).deconstruct()
+        if self.max_files is not None:
+            kwargs['max_files'] = self.max_files
+        return name, path, args, kwargs
 
     def formfield(self, **kwargs):
         defaults = {'form_class': FormResumableFileField}
