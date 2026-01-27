@@ -8,6 +8,7 @@ from django.core.files.storage import default_storage
 import json
 import logging
 
+logger = logging.getLogger(__name__)
 class UploadView(View):
     """View to handle resumable file uploads via AJAX.
     Supports POST for uploading chunks, GET for checking chunk existence,
@@ -55,10 +56,9 @@ class UploadView(View):
             # Delete from storage
             if default_storage.exists(file_path):
                 default_storage.delete(file_path)
-            
             return JsonResponse({'status': 'success', 'message': 'File removed'})
         except Exception as e:
-            print(f"[ERROR]: Failed to delete file: {str(e)}")
+            logger.error(f"Failed to delete file: {str(e)}")
             return JsonResponse({'error': str(e)}, status=500)
 
 

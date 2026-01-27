@@ -121,7 +121,7 @@
             if (array[i] === obj) { return i; }
         }
         return -1;
-    }
+    };
 
     // EVENTS
     // catchAll(event, ...)
@@ -638,7 +638,7 @@
           });
         }
         return(found);
-      }
+      };
       $.markChunksCompleted = function (chunkNumber) {
         if (!$.chunks || $.chunks.length <= chunkNumber) {
             return;
