@@ -12,7 +12,6 @@ django-resumable-async-upload is a django app to allow you to upload large files
 - Add a model field eg: `from admin_resumable.models import ResumableFileField`
 
 ```
-
     class Foo(models.Model):
         bar = models.CharField(max_length=200)
         foo = AsyncFileField()
@@ -31,22 +30,9 @@ Optional Param for `AsyncFileField`
 
 - `max_files`, default is None. Configure how many files are allowed to be uploaded to a file input.
 
-Optional Usage for `OrphanedFileCleanupMiddleware`
-
-If you want to delete files that are uploaded without saving a record in your admin panel, install the `OrphanedFileCleanupMiddleware` in your app.
-
-- Add `admin_async_upload.middleware.OrphanedFileCleanupMiddleware` to the end of your `MIDDLEWARE` in settings.py
-- Add `AsyncFileCleanupMixin` in the Admin form for the model using the `AsyncFileField`
-
-```
-
-    class AsyncAdmin(AsyncFileCleanupMixin):
-        ...
-```
-
 ## Versions
 
-4.2.0 - inital fork of django-admin-async-upload 3.0.4 with support for Django 4 and later. Includes admin form updates to pause, resume, cancel and track progress of upload. Includes a middleware to track and delete orphaned files.
+4.2.0 - inital fork of django-admin-async-upload 3.0.4 with support for Django 4 and later. Includes admin form updates to pause, resume, cancel and track progress of upload.
 
 ## Compatibility
 
