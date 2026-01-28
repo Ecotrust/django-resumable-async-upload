@@ -59,7 +59,7 @@ class UploadView(View):
             return JsonResponse({'status': 'success', 'message': 'File removed'})
         except Exception as e:
             logger.error(f"Failed to delete file: {str(e)}")
-            return JsonResponse({'error': str(e)}, status=500)
+            return JsonResponse({'error': f"Failed to delete file: {file_path} "}, status=500)
 
 
 admin_resumable = login_required(UploadView.as_view())
