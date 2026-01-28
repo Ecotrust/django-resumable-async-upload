@@ -66,7 +66,11 @@
               var index = uploadedFiles.indexOf(filePath);
               if (index > -1) {
                   uploadedFiles.splice(index, 1);
-                  $('#' + elementId).val(uploadedFiles.join(','));
+                  if (maxFiles === 1) {
+                      $('#' + elementId).val('');
+                  } else {
+                      $('#' + elementId).val(JSON.stringify(uploadedFiles));
+                  }
               }
           } else {
               // File not yet uploaded, just cancel the upload
@@ -192,8 +196,14 @@
                 // Change cancel button to remove button after upload
                 $('#' + fileId + '_cancel_btn').text('Remove').css('background', '#6c757d');
 
-                // Update hidden input with comma-separated list of file names
-                $('#' + elementId).val(uploadedFiles.join(','));
+                // Update hidden input
+                if (maxFiles === 1) {
+                    // Single file mode - store just the path
+                    $('#' + elementId).val(message);
+                } else {
+                    // Multiple files mode - store as JSON array
+                    $('#' + elementId).val(JSON.stringify(uploadedFiles));
+                }
 
                 // Display image preview if it's an image file
                 var fileType = file.file.type;

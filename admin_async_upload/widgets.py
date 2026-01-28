@@ -13,6 +13,13 @@ from admin_async_upload.storage import ResumableStorage
 class ResumableBaseWidget(FileInput):
     template_name = 'admin_resumable/admin_file_input.html'
     clear_checkbox_label = gettext_lazy('Clear')
+    allow_multiple_selected = False  # Can be overridden per instance
+
+    def __init__(self, attrs=None):
+        super().__init__(attrs)
+
+        if attrs and attrs.get('max_files') != 1:
+            self.allow_multiple_selected = True
 
     def render(self, name, value, attrs=None, **kwargs):
         persistent_storage = ResumableStorage().get_persistent_storage()
@@ -75,9 +82,12 @@ class ResumableBaseWidget(FileInput):
     def value_from_datadict(self, data, files, name):
         if not self.is_required and data.get("id_" + name + "-clear"):
             return False  # False signals to clear any existing value, as opposed to just None
-        if data.get(name, None) in ['None', 'False']:
+        
+        value = data.get(name, None)
+        if value in ['None', 'False', None]:
             return None
-        return data.get(name, None)
+
+        return value
 
 
 class ResumableAdminWidget(ResumableBaseWidget):
