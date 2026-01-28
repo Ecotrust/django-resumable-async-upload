@@ -357,7 +357,8 @@ def test_real_file_upload_cancel_single_file(admin_user, live_server, driver):
         assert len(driver.find_elements(By.CLASS_NAME, "file-status")) > 0
 
         # Click the cancel button for the first file
-        cancel_button = driver.find_element(By.CLASS_NAME, "file-cancel-btn")
+        wait = WebDriverWait(driver, 10)
+        cancel_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "file-cancel-btn")))
         cancel_button.click()
         
         # Wait a moment to allow cancellation to process
@@ -495,6 +496,9 @@ def test_real_file_upload_pause_resume(admin_user, live_server, driver, settings
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CLASS_NAME, "file-status"))
         )
+
+        wait = WebDriverWait(driver, 10)
+        pause_button = wait.until(EC.element_to_be_clickable((By.ID, "id_foo_pause")))
 
         # Get initial progress value as float
         progress_before_pause = float(driver.find_element(By.CLASS_NAME, "file-progress").get_attribute("value"))
