@@ -681,7 +681,7 @@ def test_real_file_upload_file_error(admin_user, live_server, driver):
         # Print page source for debugging
         print("Page source:", driver.page_source)
         print("Console logs:", driver.get_log('browser'))
-
+        raise
     finally:
         # Clean up test file
         if os.path.exists(test_file_path):

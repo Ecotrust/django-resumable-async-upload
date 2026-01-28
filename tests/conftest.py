@@ -14,14 +14,6 @@ browser_options["chrome"].add_argument("--no-sandbox")
 browser_options["chrome"].add_argument("--disable-dev-shm-usage")
 
 
-# Session-scoped fixture to create a temporary directory for test artifacts
-@pytest.fixture(scope="session")
-def test_temp_dir(tmp_path_factory):
-    """Create a temporary directory for test database and other artifacts."""
-    temp_dir = tmp_path_factory.mktemp("test_artifacts")
-    return temp_dir
-
-
 @pytest.fixture(scope="session", params=browsers.keys())
 def driver(request):
     b = browsers[request.param](options=browser_options[request.param])
