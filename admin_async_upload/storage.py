@@ -5,7 +5,6 @@ try:
     from django.core.files.storage import storages, InvalidStorageError
 except ImportError:
     # Fallback for older Django versions
-    from django.core.files.storage import get_storage_class
     storages = None
     InvalidStorageError = None
 
