@@ -32,8 +32,7 @@ class ResumableStorage(object):
                 # Django 4.2+ - check if it's a STORAGES key or class path
                 try:
                     return storages[self.chunk_storage_name]
-                except (KeyError, InvalidStorageError) if InvalidStorageError else KeyError:
-                    print(f"Chunk storage '{self.chunk_storage_name}' not found in STORAGES setting, treating as class path")
+                except (KeyError, InvalidStorageError):
                     # Not a STORAGES key, treat as class path
                     from django.core.files.storage import get_storage_class
                     storage_class = get_storage_class(self.chunk_storage_name)
