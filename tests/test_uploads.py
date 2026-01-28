@@ -463,13 +463,14 @@ def test_real_file_upload_cancel_all_files(admin_user, live_server, driver):
 
 @pytest.mark.django_db
 def test_real_file_upload_pause_resume(admin_user, live_server, driver, settings):
-    settings.ADMIN_RESUMABLE_CHUNKSIZE = "1*1024*1024"  # 1MB chunks
+    # Set smaller chunk size to make have more incremental progress for pause/resume testing
+    settings.ADMIN_RESUMABLE_CHUNKSIZE = "100*1024"  # 100KB chunks
     test_file_path = "/tmp/test_large_file_cancel_all.bin"
     # Clean up any existing test file from prior runs just in case
     if os.path.exists(test_file_path):
         os.unlink(test_file_path)
 
-    create_test_file(test_file_path, 50)
+    create_test_file(test_file_path, 5)
 
     driver.get(live_server.url + "/admin/")
     
