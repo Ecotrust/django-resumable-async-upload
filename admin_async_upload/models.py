@@ -1,6 +1,6 @@
 from django.db import models
 from admin_async_upload.widgets import ResumableAdminWidget
-from admin_async_upload.fields import FormResumableFileField, FormResumableMultipleFileField
+from admin_async_upload.fields import FormResumableFileField
 
 
 class AsyncFileField(models.FileField):
@@ -16,7 +16,7 @@ class AsyncFileField(models.FileField):
         return name, path, args, kwargs
 
     def formfield(self, **kwargs):
-        defaults = {'form_class': FormResumableFileField if self.max_files == 1 else FormResumableMultipleFileField}
+        defaults = {'form_class': FormResumableFileField}
         if self.model and self.name:
             defaults['widget'] = ResumableAdminWidget(attrs={
                 'model': self.model,
