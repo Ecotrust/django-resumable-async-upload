@@ -208,7 +208,7 @@
                 // Display image preview if it's an image file
                 var fileType = file.file.type;
                 if (fileType && fileType.startsWith('image/') && {{ show_thumb|yesno:"true,false" }} && {% if MEDIA_URL %}true{% else %}false{% endif %} ) {
-                    var imageUrl = '{{ MEDIA_URL }}' + message;
+                    var imageUrl = '{{ MEDIA_URL|escapejs }}' + message;
                     var imgHtml = '<img src="' + imageUrl + '" class="thumbnail " />';
                     $('#' + fileId + '_preview').html(imgHtml);
                 }
