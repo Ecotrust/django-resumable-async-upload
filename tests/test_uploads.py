@@ -354,6 +354,15 @@ def test_real_file_upload_cancel_single_file(admin_user, live_server, driver):
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CLASS_NAME, "file-status"))
         )
+
+        WebDriverWait(driver, 15).until(
+            lambda d: len(d.find_elements(By.CLASS_NAME, "file-progress")) > 0 and
+                    float(d.find_element(By.CLASS_NAME, "file-progress").get_attribute("value") or 0) > 0
+        )
+
+        cancel_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CLASS_NAME, "file-cancel-btn"))
+        )
         assert len(driver.find_elements(By.CLASS_NAME, "file-status")) > 0
 
         # Click the cancel button for the first file
