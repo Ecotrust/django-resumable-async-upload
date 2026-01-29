@@ -1,6 +1,6 @@
 [project]
 name = "django-resumable-async-upload"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Django app for the uploading of large files from the django admin site."
 readme = "README.md"
 authors = [
