@@ -160,6 +160,7 @@ def test_fake_file_upload_incomplete_chunk(admin_user, admin_client):
     # should be a 404 because we uploaded an incomplete chunk
     assert get_response.status_code == 404
 
+
 @pytest.mark.django_db
 def test_real_file_upload(admin_user, live_server, page):
     test_file_path = "/tmp/test_small_file_success.bin"
@@ -169,22 +170,22 @@ def test_real_file_upload(admin_user, live_server, page):
     create_test_file(test_file_path, 5)
 
     page.goto(live_server.url + "/admin/")
-    
+
     # Wait for login page to load and fill in credentials
     page.wait_for_selector("#id_username")
     page.fill("#id_username", "admin")
     page.fill("#id_password", "password")
     page.click('input[value="Log in"]')
-    
+
     # Wait for successful login - check that we're no longer on the login page
     page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
-    
+
     # Verify we can see the admin dashboard (session is working)
     page.wait_for_selector("#content")
-    
+
     # Add extra wait to ensure session cookie is fully set
     time.sleep(2)
-    
+
     page.goto(live_server.url + "/admin/tests/foo/add/")
     page.wait_for_selector("#id_foo_input_file", timeout=15000)
     page.set_input_files("#id_foo_input_file", test_file_path)
@@ -192,33 +193,38 @@ def test_real_file_upload(admin_user, live_server, page):
     try:
         # Wait for at least one file-status element to appear
         page.wait_for_selector(".file-status", timeout=15000)
-        
+
         # Wait for the upload to complete by checking for "Uploaded" or "✓" in the status
-        page.wait_for_function("""
+        page.wait_for_function(
+            """
             () => {
                 const elements = document.querySelectorAll('.file-status');
                 return Array.from(elements).some(elem => 
                     elem.textContent.includes('Uploaded') || elem.textContent.includes('✓')
                 );
             }
-        """, timeout=20000)
-        
+        """,
+            timeout=20000,
+        )
+
         # Verify the upload completed successfully
         status_elements = page.locator(".file-status").all()
         status_texts = [elem.text_content() for elem in status_elements]
-        assert any("Uploaded" in text or "✓" in text for text in status_texts), \
+        assert any("Uploaded" in text or "✓" in text for text in status_texts), (
             f"No file status contains 'Uploaded' or '✓'. Found: {status_texts}"
-        
+        )
+
     except Exception as e:
         # Print page content for debugging
         print("Page source:", page.content())
         print("Console logs:", page.evaluate("() => console.log('Debug info')"))
-        
+
         raise
     finally:
         # Clean up test file
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
+
 
 @pytest.mark.django_db
 def test_real_file_upload_multiple(admin_user, live_server, page):
@@ -228,27 +234,27 @@ def test_real_file_upload_multiple(admin_user, live_server, page):
     if os.path.exists(test_file_path_1):
         os.unlink(test_file_path_1)
     if os.path.exists(test_file_path_2):
-        os.unlink(test_file_path_2) 
+        os.unlink(test_file_path_2)
     create_test_file(test_file_path_1, 5)
     create_test_file(test_file_path_2, 5)
 
     page.goto(live_server.url + "/admin/")
-    
+
     # Wait for login page and fill credentials
     page.wait_for_selector("#id_username")
     page.fill("#id_username", "admin")
     page.fill("#id_password", "password")
     page.click('input[value="Log in"]')
-    
+
     # Wait for successful login
     page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
     page.wait_for_selector("#content")
     time.sleep(2)
-    
+
     page.goto(live_server.url + "/admin/tests/foo/add/")
     page.wait_for_selector("#id_bar")
     page.fill("#id_bar", "bat")
-    
+
     # Wait for file input and upload multiple files
     page.wait_for_selector("#id_foo_input_file")
     time.sleep(1)
@@ -257,24 +263,30 @@ def test_real_file_upload_multiple(admin_user, live_server, page):
     try:
         # Wait for file-status elements
         page.wait_for_selector(".file-status", timeout=15000)
-        
+
         # Wait for uploads to complete
-        page.wait_for_function("""
+        page.wait_for_function(
+            """
             () => {
                 const elements = document.querySelectorAll('.file-status');
                 return Array.from(elements).some(elem => 
                     elem.textContent.includes('Uploaded') || elem.textContent.includes('✓')
                 );
             }
-        """, timeout=20000)
-        
+        """,
+            timeout=20000,
+        )
+
         # Verify uploads completed successfully
         status_elements = page.locator(".file-status").all()
         status_texts = [elem.text_content() for elem in status_elements]
-        
-        assert any("Uploaded" in text or "✓" in text for text in status_texts), \
+
+        assert any("Uploaded" in text or "✓" in text for text in status_texts), (
             f"No file status contains 'Uploaded' or '✓'. Found: {status_texts}"
-        assert len(status_elements) == 2, f"Expected 2 file-status elements, found {len(status_elements)}"
+        )
+        assert len(status_elements) == 2, (
+            f"Expected 2 file-status elements, found {len(status_elements)}"
+        )
 
     except Exception as e:
         print("Page source:", page.content())
@@ -301,7 +313,7 @@ def test_real_file_upload_cancel_single_file(admin_user, live_server, page):
     page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
     page.wait_for_selector("#content")
     time.sleep(2)
-    
+
     page.goto(live_server.url + "/admin/tests/foo/add/")
     page.wait_for_selector("#id_foo_input_file", timeout=15000)
     page.set_input_files("#id_foo_input_file", test_file_path)
@@ -309,34 +321,40 @@ def test_real_file_upload_cancel_single_file(admin_user, live_server, page):
     try:
         # Wait for file-status element
         page.wait_for_selector(".file-status", timeout=20000)
-        
+
         # Wait for upload to start
-        page.wait_for_function("""
+        page.wait_for_function(
+            """
             () => {
                 const progress = document.querySelector('.file-progress');
                 return progress && parseFloat(progress.value) > 0;
             }
-        """, timeout=15000)
+        """,
+            timeout=15000,
+        )
 
         # Click cancel button
         cancel_button = page.locator(".file-cancel-btn").first
         cancel_button.wait_for(state="visible", timeout=10000)
         cancel_button.click()
-        
+
         time.sleep(2)
-        
+
         # Verify cancellation
         status_elements = page.locator(".file-status").all()
         status_texts = [elem.text_content() for elem in status_elements]
-        
+
         assert all("Uploaded" not in text and "✓" not in text for text in status_texts)
-        assert len(status_elements) == 0, f"Expected 0 file-status elements after cancellation, found {len(status_elements)}"
+        assert len(status_elements) == 0, (
+            f"Expected 0 file-status elements after cancellation, found {len(status_elements)}"
+        )
     except Exception as e:
         print("Page source:", page.content())
         raise
     finally:
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
+
 
 @pytest.mark.django_db
 def test_real_file_upload_cancel_all_files(admin_user, live_server, page):
@@ -353,7 +371,7 @@ def test_real_file_upload_cancel_all_files(admin_user, live_server, page):
     page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
     page.wait_for_selector("#content")
     time.sleep(2)
-    
+
     page.goto(live_server.url + "/admin/tests/foo/add/")
     page.wait_for_selector("#id_foo_input_file")
     page.set_input_files("#id_foo_input_file", test_file_path)
@@ -362,24 +380,29 @@ def test_real_file_upload_cancel_all_files(admin_user, live_server, page):
         # Wait for cancel button to be clickable
         page.wait_for_selector("#id_foo_cancel", state="visible", timeout=15000)
         page.wait_for_selector(".file-status", timeout=5000)
-        
+
         # Click cancel
         page.click("#id_foo_cancel")
         time.sleep(2)
-        
+
         # Verify no status elements remain
         status_elements = page.locator(".file-status").all()
-        assert len(status_elements) == 0, f"Expected 0 file-status elements after cancellation, found {len(status_elements)}"
-        
+        assert len(status_elements) == 0, (
+            f"Expected 0 file-status elements after cancellation, found {len(status_elements)}"
+        )
+
         # Verify controls are hidden
         controls_visible = page.locator("#id_foo_controls").is_visible()
-        assert not controls_visible, "Controls element should be hidden after cancelling all uploads"
+        assert not controls_visible, (
+            "Controls element should be hidden after cancelling all uploads"
+        )
     except Exception as e:
         print("Page source:", page.content())
         raise
     finally:
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
+
 
 @pytest.mark.django_db
 def test_real_file_upload_pause_resume(admin_user, live_server, page, settings):
@@ -397,53 +420,69 @@ def test_real_file_upload_pause_resume(admin_user, live_server, page, settings):
     page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
     page.wait_for_selector("#content")
     time.sleep(2)
-    
+
     page.goto(live_server.url + "/admin/tests/foo/add/")
     page.wait_for_selector("#id_foo_input_file")
     page.set_input_files("#id_foo_input_file", test_file_path)
-    
+
     try:
         # Wait for file-status element
         page.wait_for_selector(".file-status", timeout=15000)
         page.wait_for_selector("#id_foo_pause", state="visible", timeout=10000)
 
         # Get initial progress
-        progress_before_pause = float(page.locator(".file-progress").first.get_attribute("value"))
-        assert progress_before_pause > 0, f"Upload has not started. Progress: {progress_before_pause}"
+        progress_before_pause = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
+        assert progress_before_pause > 0, (
+            f"Upload has not started. Progress: {progress_before_pause}"
+        )
 
         # Pause upload
         page.click("#id_foo_pause")
         time.sleep(1)
-        
+
         # Get progress after pausing
-        progress_during_pause_1 = float(page.locator(".file-progress").first.get_attribute("value"))
+        progress_during_pause_1 = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
         time.sleep(5)
-        progress_during_pause_2 = float(page.locator(".file-progress").first.get_attribute("value"))
-        
+        progress_during_pause_2 = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
+
         # Verify progress hasn't increased while paused
-        assert abs(progress_during_pause_2 - progress_during_pause_1) < 0.05, \
+        assert abs(progress_during_pause_2 - progress_during_pause_1) < 0.05, (
             f"Upload continued while paused. First: {progress_during_pause_1}, Second: {progress_during_pause_2}"
-        
+        )
+
         # Resume upload
         page.click("#id_foo_resume")
-        
+
         # Wait for completion
-        page.wait_for_function("""
+        page.wait_for_function(
+            """
             () => {
                 const elements = document.querySelectorAll('.file-status');
                 return Array.from(elements).some(elem => 
                     elem.textContent.includes('Uploaded') || elem.textContent.includes('✓')
                 );
             }
-        """, timeout=20000)
-        
-        progress_after_resume = float(page.locator(".file-progress").first.get_attribute("value"))
-        
+        """,
+            timeout=20000,
+        )
+
+        progress_after_resume = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
+
         # Verify progress after resume
-        assert progress_after_resume > progress_during_pause_2, \
+        assert progress_after_resume > progress_during_pause_2, (
             f"Upload did not progress after resume. During pause: {progress_during_pause_2}, After: {progress_after_resume}"
-        assert progress_after_resume == 1.0, \
+        )
+        assert progress_after_resume == 1.0, (
             f"Upload did not complete after resume. Final progress: {progress_after_resume}"
+        )
 
     except Exception as e:
         print("Page source:", page.content())
@@ -451,6 +490,7 @@ def test_real_file_upload_pause_resume(admin_user, live_server, page, settings):
     finally:
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
+
 
 def test_real_file_upload_file_error(admin_user, live_server, page):
     test_file_path = "/tmp/test_failed_file.bin"
@@ -466,11 +506,11 @@ def test_real_file_upload_file_error(admin_user, live_server, page):
     page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
     page.wait_for_selector("#content")
     time.sleep(2)
-    
+
     page.goto(live_server.url + "/admin/tests/foo/add/")
     page.wait_for_selector("#id_bar")
     page.fill("#id_bar", "bat")
-    
+
     # Inject JavaScript to mock error response
     page.evaluate("""
         (function() {
@@ -527,7 +567,7 @@ def test_real_file_upload_file_error(admin_user, live_server, page):
             };
         })();
     """)
-    
+
     # Wait for file input and upload
     page.wait_for_selector("#id_foo_input_file")
     time.sleep(1)
@@ -535,26 +575,29 @@ def test_real_file_upload_file_error(admin_user, live_server, page):
 
     try:
         # Wait for error message in file-status
-        page.wait_for_function("""
+        page.wait_for_function(
+            """
             () => {
                 const elements = document.querySelectorAll('.file-status');
                 return Array.from(elements).some(elem => 
                     elem.textContent.includes('Error')
                 );
             }
-        """, timeout=20000)
-        
+        """,
+            timeout=20000,
+        )
+
         # Verify error message is displayed
         status_elements = page.locator(".file-status").all()
         status_texts = [elem.text_content() for elem in status_elements]
 
-        assert any("Error" in text for text in status_texts), \
+        assert any("Error" in text for text in status_texts), (
             f"No file status contains 'Error'. Found: {status_texts}"
-        
+        )
+
     except Exception as e:
         print("Page source:", page.content())
         raise
     finally:
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
-

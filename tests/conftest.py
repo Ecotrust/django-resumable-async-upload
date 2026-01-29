@@ -14,7 +14,7 @@ def test_temp_dir(tmp_path_factory):
 def pytest_configure():
     import django
     from django.conf import settings
-    
+
     # Create a temporary directory for the test database
     test_db_dir = tempfile.mkdtemp(prefix="django_test_")
     test_db_path = os.path.join(test_db_dir, "test_db.sqlite3")
@@ -78,15 +78,15 @@ def pytest_configure():
         MEDIA_ROOT=os.path.join(os.path.dirname(__file__), "media"),
         ADMIN_SIMULTANEOUS_UPLOADS=1,
         # Disable async DB access for Playwright compatibility
-        DJANGO_ALLOW_ASYNC_UNSAFE=True
+        DJANGO_ALLOW_ASYNC_UNSAFE=True,
     )
-    
+
     # Store the test DB directory for cleanup
     settings.TEST_DB_DIR = test_db_dir
-    
+
     # Allow async unsafe operations for Playwright tests
     os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
-    
+
     try:
         import django
 
@@ -99,8 +99,8 @@ def pytest_unconfigure():
     """Clean up temporary test database directory after all tests."""
     import shutil
     from django.conf import settings
-    
-    if hasattr(settings, 'TEST_DB_DIR') and os.path.exists(settings.TEST_DB_DIR):
+
+    if hasattr(settings, "TEST_DB_DIR") and os.path.exists(settings.TEST_DB_DIR):
         try:
             shutil.rmtree(settings.TEST_DB_DIR)
         except Exception as e:

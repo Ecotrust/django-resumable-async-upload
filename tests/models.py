@@ -8,4 +8,4 @@ from admin_async_upload.models import AsyncFileField
 class Foo(models.Model):
     bar = models.CharField(max_length=200)
     foo = AsyncFileField()
-    bat = AsyncFileField(upload_to=settings.MEDIA_ROOT + '/upto/')
+    bat = AsyncFileField(upload_to=settings.MEDIA_ROOT + "/upto/")
