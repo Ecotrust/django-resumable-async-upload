@@ -7,14 +7,29 @@ django-resumable-async-upload is a django app to allow you to upload large files
 ## Installation
 
 - pip install django-resumable-async-upload
-- Add `admin_async_upload` to your `INSTALLED_APPS`
-- Add `re_path(r"^admin_async_upload/", include("admin_async_upload.urls")),` to your urls.py
-- Add a model field eg: `from admin_resumable.models import ResumableFileField`
+- Add `django_resumable_async_upload` to your `INSTALLED_APPS`
+- Add `re_path(r"^django_resumable_async_upload/", include("django_resumable_async_upload.urls")),` to your urls.py
+- Add in your models field
 
 ```
-    class Foo(models.Model):
-        bar = models.CharField(max_length=200)
-        foo = AsyncFileField()
+from django_resumable_async_upload.models import AsyncFileField
+
+class Foo(models.Model):
+    bar = models.CharField(max_length=200)
+    foo = AsyncFileField()
+```
+
+- Add in your admin form:
+
+```
+from django_resumable_async_upload.fields import FormResumableMultipleFileField
+from django_resumable_async_upload.widgets import ResumableAdminWidget
+
+class MultiUploadForm(forms.ModelForm):
+    files = FormResumableMultipleFileField(
+        required=False,
+        widget=ResumableAdminWidget(attrs={"model": File, "field_name": "file"}),
+    )
 ```
 
 Optional Settings:
@@ -32,7 +47,7 @@ Optional Param for `AsyncFileField`
 
 ## Versions
 
-4.2.0 - inital fork of django-admin-async-upload 3.0.4 with support for Django 4 and later. Includes admin form updates to pause, resume, cancel and track progress of upload.
+0.1.0 - inital fork of django-async-upload 4.0.1 with support for Django 4 and later. Includes admin form updates to pause, resume, cancel and track progress of upload. Also supports uploads of multiple files
 
 ## Compatibility
 

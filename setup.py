@@ -10,7 +10,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 setup(
     name="django-resumable-async-upload",
     version="4.2.0",
-    packages=["admin_async_upload"],
+    packages=["admin_resumable_async_upload"],
     include_package_data=True,
     package_data={
         "admin_async_upload": [
