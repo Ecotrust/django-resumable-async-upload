@@ -22,4 +22,4 @@ jobs:
 
       - name: Run tests
         # TODO: Remove the ignore flag once test_upload.py is fixed, or uses a different approach like playwright
-        run: pytest --ignore=tests/test_upload.py
+        run: pytest --ignore=tests/test_uploads.py
