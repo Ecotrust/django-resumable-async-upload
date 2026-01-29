@@ -1,26 +1,14 @@
 import pytest
 import os
 import tempfile
-from selenium import webdriver
-
-browsers = {
-    "chrome": webdriver.Chrome,
-}
-
-browser_options = {"chrome": webdriver.ChromeOptions()}
-
-browser_options["chrome"].add_argument("--headless")
-browser_options["chrome"].add_argument("--no-sandbox")
-browser_options["chrome"].add_argument("--disable-dev-shm-usage")
 
 
-@pytest.fixture(scope="session", params=browsers.keys())
-def driver(request):
-    b = browsers[request.param](options=browser_options[request.param])
-
-    request.addfinalizer(lambda *args: b.quit())
-
-    return b
+# Session-scoped fixture to create a temporary directory for test artifacts
+@pytest.fixture(scope="session")
+def test_temp_dir(tmp_path_factory):
+    """Create a temporary directory for test database and other artifacts."""
+    temp_dir = tmp_path_factory.mktemp("test_artifacts")
+    return temp_dir
 
 
 def pytest_configure():
@@ -88,11 +76,16 @@ def pytest_configure():
         ),
         PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",),
         MEDIA_ROOT=os.path.join(os.path.dirname(__file__), "media"),
-        ADMIN_SIMULTANEOUS_UPLOADS=1
+        ADMIN_SIMULTANEOUS_UPLOADS=1,
+        # Disable async DB access for Playwright compatibility
+        DJANGO_ALLOW_ASYNC_UNSAFE=True
     )
     
     # Store the test DB directory for cleanup
     settings.TEST_DB_DIR = test_db_dir
+    
+    # Allow async unsafe operations for Playwright tests
+    os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
     
     try:
         import django
