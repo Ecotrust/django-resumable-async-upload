@@ -45,6 +45,7 @@ class UploadView(View):
     
     def delete(self, request, *args, **kwargs):
         """Handle file deletion via DELETE request."""
+        file_path = None
         try:
             # Parse the file path from request body
             body = json.loads(request.body.decode('utf-8'))
