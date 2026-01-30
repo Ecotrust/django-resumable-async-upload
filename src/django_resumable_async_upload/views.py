@@ -3,7 +3,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.http import HttpResponse, JsonResponse
 from django.utils.functional import cached_property
 from django.views.generic import View
-from admin_async_upload.files import ResumableFile
+from django_resumable_async_upload.files import ResumableFile
 from django.core.files.storage import default_storage
 import json
 import logging

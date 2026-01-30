@@ -6,7 +6,7 @@ from django.core.files import File
 from django.utils.functional import cached_property
 from django.conf import settings
 
-from admin_async_upload.storage import ResumableStorage
+from django_resumable_async_upload.storage import ResumableStorage
 
 
 class ResumableFile(object):

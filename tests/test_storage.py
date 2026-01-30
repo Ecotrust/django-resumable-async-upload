@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 from django.test import override_settings
 from django.core.files.storage import FileSystemStorage
 
-from admin_async_upload.storage import ResumableStorage
+from django_resumable_async_upload.storage import ResumableStorage
 
 
 class TestResumableStorage:
@@ -104,14 +104,14 @@ class TestResumableStorage:
         # Should always be FileSystemStorage by default, not following default storage
         assert isinstance(chunk_storage, FileSystemStorage)
 
-    @patch("admin_async_upload.storage.storages", None)
+    @patch("django_resumable_async_upload.storage.storages", None)
     def test_get_chunk_storage_older_django(self):
         """Test chunk storage behavior with older Django (no storages API)."""
         storage = ResumableStorage()
         chunk_storage = storage.get_chunk_storage()
         assert isinstance(chunk_storage, FileSystemStorage)
 
-    @patch("admin_async_upload.storage.storages", None)
+    @patch("django_resumable_async_upload.storage.storages", None)
     def test_get_persistent_storage_older_django(self):
         """Test persistent storage behavior with older Django (no storages API)."""
         storage = ResumableStorage()

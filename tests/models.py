@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from admin_async_upload.models import AsyncFileField
+from django_resumable_async_upload.models import AsyncFileField
 
 
 # Stolen from the README

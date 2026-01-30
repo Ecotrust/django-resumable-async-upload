@@ -11,12 +11,12 @@ setup(
     name="django-resumable-async-upload",
     version="4.2.0",
     packages=["admin_resumable_async_upload"],
+    package_dir={"": "src"},
     include_package_data=True,
     package_data={
-        "admin_async_upload": [
-            "templates/admin_resumable/admin_file_input.html",
-            "templates/admin_resumable/user_file_input.html",
-            "static/admin_resumable/js/resumable.js",
+        "django_resumable_async_upload": [
+            "templates/admin_resumable/*.html",
+            "static/admin_resumable/js/*.js",
         ]
     },
     license="MIT License",

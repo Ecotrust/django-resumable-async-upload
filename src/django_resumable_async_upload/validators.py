@@ -1,4 +1,4 @@
-from admin_async_upload.storage import ResumableStorage
+from django_resumable_async_upload.storage import ResumableStorage
 from os.path import splitext
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _

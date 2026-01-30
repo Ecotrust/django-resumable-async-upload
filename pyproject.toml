@@ -28,3 +28,6 @@ Issues = "https://github.com/Ecotrust/django-resumable-async-upload/issues"
 [build-system]
 requires = ["uv_build>=0.9.16,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

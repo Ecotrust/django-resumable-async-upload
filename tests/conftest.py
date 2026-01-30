@@ -71,7 +71,7 @@ def pytest_configure():
             "django.contrib.sites",
             "django.contrib.messages",
             "django.contrib.staticfiles",
-            "admin_async_upload",
+            "django_resumable_async_upload",
             "tests",
         ),
         PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",),

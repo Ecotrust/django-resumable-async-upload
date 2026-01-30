@@ -7,7 +7,7 @@ from django.templatetags.static import static
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy
 
-from admin_async_upload.storage import ResumableStorage
+from django_resumable_async_upload.storage import ResumableStorage
 
 
 class ResumableBaseWidget(FileInput):
