@@ -1,36 +1,29 @@
 import pytest
 import os
-from selenium import webdriver
-
-browsers = {
-    "firefox": webdriver.Firefox,
-    #'PhantomJS': webdriver.PhantomJS,
-    #'chrome': webdriver.Chrome,
-}
-
-browser_options = {"firefox": webdriver.FirefoxOptions()}
-
-browser_options["firefox"].add_argument("--headless")
+import tempfile
 
 
-@pytest.fixture(scope="session", params=browsers.keys())
-def driver(request):
-    b = browsers[request.param](options=browser_options[request.param])
-
-    request.addfinalizer(lambda *args: b.quit())
-
-    return b
+# Session-scoped fixture to create a temporary directory for test artifacts
+@pytest.fixture(scope="session")
+def test_temp_dir(tmp_path_factory):
+    """Create a temporary directory for test database and other artifacts."""
+    temp_dir = tmp_path_factory.mktemp("test_artifacts")
+    return temp_dir
 
 
 def pytest_configure():
     import django
     from django.conf import settings
 
+    # Create a temporary directory for the test database
+    test_db_dir = tempfile.mkdtemp(prefix="django_test_")
+    test_db_path = os.path.join(test_db_dir, "test_db.sqlite3")
+
     settings.configure(
         DEBUG=False,
         DEBUG_PROPAGATE_EXCEPTIONS=True,
         DATABASES={
-            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": test_db_path}
         },
         SITE_ID=1,
         SECRET_KEY="not very secret in tests",
@@ -38,6 +31,7 @@ def pytest_configure():
         USE_L10N=True,
         STATIC_URL="/static/",
         ROOT_URLCONF="tests.urls",
+        LOGIN_URL="/admin/login/",
         TEMPLATE_LOADERS=(
             "django.template.loaders.filesystem.Loader",
             "django.template.loaders.app_directories.Loader",
@@ -77,15 +71,37 @@ def pytest_configure():
             "django.contrib.sites",
             "django.contrib.messages",
             "django.contrib.staticfiles",
-            "admin_async_upload",
+            "django_resumable_async_upload",
             "tests",
         ),
         PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",),
         MEDIA_ROOT=os.path.join(os.path.dirname(__file__), "media"),
+        ADMIN_SIMULTANEOUS_UPLOADS=1,
+        # Disable async DB access for Playwright compatibility
+        DJANGO_ALLOW_ASYNC_UNSAFE=True,
     )
+
+    # Store the test DB directory for cleanup
+    settings.TEST_DB_DIR = test_db_dir
+
+    # Allow async unsafe operations for Playwright tests
+    os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
+
     try:
         import django
 
         django.setup()
     except AttributeError:
         pass
+
+
+def pytest_unconfigure():
+    """Clean up temporary test database directory after all tests."""
+    import shutil
+    from django.conf import settings
+
+    if hasattr(settings, "TEST_DB_DIR") and os.path.exists(settings.TEST_DB_DIR):
+        try:
+            shutil.rmtree(settings.TEST_DB_DIR)
+        except Exception as e:
+            print(f"Warning: Could not clean up test DB directory: {e}")

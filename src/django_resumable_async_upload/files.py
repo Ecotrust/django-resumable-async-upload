@@ -2,11 +2,11 @@
 import fnmatch
 import tempfile
 
-from django.contrib.contenttypes.models import ContentType
 from django.core.files import File
 from django.utils.functional import cached_property
+from django.conf import settings
 
-from admin_async_upload.storage import ResumableStorage
+from django_resumable_async_upload.storage import ResumableStorage
 
 
 class ResumableFile(object):
@@ -25,6 +25,7 @@ class ResumableFile(object):
         self.user = user
         self.params = params
         self.chunk_suffix = "_part_"
+        self.chunk_folder = getattr(settings, "ADMIN_RESUMABLE_CHUNK_FOLDER", "")
 
     @cached_property
     def resumable_storage(self):
@@ -45,7 +46,9 @@ class ResumableFile(object):
             instance = self.field.model.objects.filter(pk=instance_id).first()
         else:
             instance = None
-        return self.resumable_storage.full_filename(self.filename, self.upload_to, instance=instance)
+        return self.resumable_storage.full_filename(
+            self.filename, self.upload_to, instance=instance
+        )
 
     @property
     def upload_to(self):
@@ -56,41 +59,52 @@ class ResumableFile(object):
         """
         Checks if the requested chunk exists.
         """
-        return self.chunk_storage.exists(self.current_chunk_name) and \
-               self.chunk_storage.size(self.current_chunk_name) == int(self.params.get('resumableCurrentChunkSize'))
+        return self.chunk_storage.exists(
+            self.current_chunk_name
+        ) and self.chunk_storage.size(self.current_chunk_name) == int(
+            self.params.get("resumableCurrentChunkSize")
+        )
 
     @property
     def chunk_names(self):
         """
-        Iterates over all stored chunks.
+        Iterates over all stored chunks in the configured chunk folder.
         """
         chunks = []
-        files = sorted(self.chunk_storage.listdir('')[1])
+        try:
+            files = sorted(self.chunk_storage.listdir(self.chunk_folder)[1])
+        except (FileNotFoundError, OSError):
+            # chunks folder doesn't exist yet
+            return chunks
         for file in files:
-            if fnmatch.fnmatch(file, '%s%s*' % (self.filename,
-                                                self.chunk_suffix)):
-                chunks.append(file)
+            if fnmatch.fnmatch(file, "%s%s*" % (self.filename, self.chunk_suffix)):
+                if self.chunk_folder:
+                    chunks.append(self.chunk_folder + "/" + file)
+                else:
+                    chunks.append(file)
         return chunks
 
     @property
     def current_chunk_name(self):
         # TODO: add user identifier to chunk name
-        return "%s%s%s" % (
+        chunk_name = "%s%s%s" % (
             self.filename,
             self.chunk_suffix,
-            self.params.get('resumableChunkNumber').zfill(4)
+            self.params.get("resumableChunkNumber").zfill(4),
         )
+        if self.chunk_folder:
+            return "%s/%s" % (self.chunk_folder, chunk_name)
+        return chunk_name
 
     def chunks(self):
         """
         Iterates over all stored chunks.
         """
         # TODO: add user identifier to chunk name
-        files = sorted(self.chunk_storage.listdir('')[1])
+        files = sorted(self.chunk_storage.listdir("")[1])
         for file in files:
-            if fnmatch.fnmatch(file, '%s%s*' % (self.filename,
-                                                self.chunk_suffix)):
-                yield self.chunk_storage.open(file, 'rb').read()
+            if fnmatch.fnmatch(file, "%s%s*" % (self.filename, self.chunk_suffix)):
+                yield self.chunk_storage.open(file, "rb").read()
 
     def delete_chunks(self):
         [self.chunk_storage.delete(chunk) for chunk in self.chunk_names]
@@ -101,7 +115,7 @@ class ResumableFile(object):
         Merges file and returns its file pointer.
         """
         if not self.is_complete:
-            raise Exception('Chunk(s) still missing')
+            raise Exception("Chunk(s) still missing")
         outfile = tempfile.NamedTemporaryFile("w+b")
         for chunk in self.chunk_names:
             outfile.write(self.chunk_storage.open(chunk).read())
@@ -113,10 +127,10 @@ class ResumableFile(object):
         Gets the filename.
         """
         # TODO: add user identifier to chunk name
-        filename = self.params.get('resumableFilename')
-        if '/' in filename:
-            raise Exception('Invalid filename')
-        value = "%s_%s" % (self.params.get('resumableTotalSize'), filename)
+        filename = self.params.get("resumableFilename")
+        if "/" in filename:
+            raise Exception("Invalid filename")
+        value = "%s_%s" % (self.params.get("resumableTotalSize"), filename)
         return value
 
     @property
@@ -124,7 +138,7 @@ class ResumableFile(object):
         """
         Checks if all chunks are already stored.
         """
-        return int(self.params.get('resumableTotalSize')) == self.size
+        return int(self.params.get("resumableTotalSize")) == self.size
 
     def process_chunk(self, file):
         """
@@ -145,6 +159,12 @@ class ResumableFile(object):
         return size
 
     def collect(self):
-        actual_filename = self.persistent_storage.save(self.storage_filename, File(self.file))
+        """
+        Saves the complete file to persistent storage and deletes chunks.
+        Returns the actual filename in persistent storage.
+        """
+        actual_filename = self.persistent_storage.save(
+            self.storage_filename, File(self.file)
+        )
         self.delete_chunks()
         return actual_filename

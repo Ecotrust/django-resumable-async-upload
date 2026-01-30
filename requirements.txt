@@ -1,0 +1,6 @@
+django >=4.2.16,<4.3
+pytest
+pytest-django
+playwright
+pytest-playwright
+webdriver-manager

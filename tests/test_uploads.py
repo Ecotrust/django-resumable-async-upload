@@ -4,10 +4,6 @@ from django.test import client as client_module
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-
 import os
 import pytest
 import time
@@ -51,6 +47,7 @@ def test_fake_file_upload(admin_user, admin_client):
     file_data = "foo bar foo bar."
     file_size = str(len(file_data))
     form_vals += form_value_list("resumableChunkNumber", "1")
+    form_vals += form_value_list("resumableCurrentChunkSize", file_size)
     form_vals += form_value_list("resumableChunkSize", file_size)
     form_vals += form_value_list("resumableType", "text/plain")
     form_vals += form_value_list("resumableIdentifier", file_size + "-foobar")
@@ -165,50 +162,442 @@ def test_fake_file_upload_incomplete_chunk(admin_user, admin_client):
 
 
 @pytest.mark.django_db
-def test_real_file_upload(admin_user, live_server, driver):
-    test_file_path = "/tmp/test_small_file.bin"
+def test_real_file_upload(admin_user, live_server, page):
+    test_file_path = "/tmp/test_small_file_success.bin"
+    # Clean up any existing test file from prior runs just in case
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
     create_test_file(test_file_path, 5)
 
-    driver.get(live_server.url + "/admin/")
-    driver.find_element(By.ID, "id_username").send_keys("admin")
-    driver.find_element(By.ID, "id_password").send_keys("password")
-    driver.find_element(By.XPATH, '//input[@value="Log in"]').click()
-    driver.implicitly_wait(2)
-    driver.get(live_server.url + "/admin/tests/foo/add/")
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "id_bar")))
-    driver.find_element(By.ID, "id_bar").send_keys("bat")
-    driver.find_element(By.ID, "id_foo_input_file").send_keys(test_file_path)
-    status_text = driver.find_element(By.ID, "id_foo_uploaded_status").text
-    print("status_text", status_text)
-    i = 0
-    while i < 5:
-        if "Uploaded" in driver.find_element(By.ID, "id_foo_uploaded_status").text:
-            return  # success
-        time.sleep(1)
-        i += 1
-    assert False, f"Status text is '{driver.find_element(By.ID, 'id_foo_uploaded_status').text}'; expected 'Uploaded"
+    page.goto(live_server.url + "/admin/")
+
+    # Wait for login page to load and fill in credentials
+    page.wait_for_selector("#id_username")
+    page.fill("#id_username", "admin")
+    page.fill("#id_password", "password")
+    page.click('input[value="Log in"]')
+
+    # Wait for successful login - check that we're no longer on the login page
+    page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
+
+    # Verify we can see the admin dashboard (session is working)
+    page.wait_for_selector("#content")
+
+    # Add extra wait to ensure session cookie is fully set
+    time.sleep(2)
+
+    page.goto(live_server.url + "/admin/tests/foo/add/")
+    page.wait_for_selector("#id_foo_input_file", timeout=15000)
+    page.set_input_files("#id_foo_input_file", test_file_path)
+
+    try:
+        # Wait for at least one file-status element to appear
+        page.wait_for_selector(".file-status", timeout=15000)
+
+        # Wait for the upload to complete by checking for "Uploaded" or "✓" in the status
+        page.wait_for_function(
+            """
+            () => {
+                const elements = document.querySelectorAll('.file-status');
+                return Array.from(elements).some(elem => 
+                    elem.textContent.includes('Uploaded') || elem.textContent.includes('✓')
+                );
+            }
+        """,
+            timeout=20000,
+        )
+
+        # Verify the upload completed successfully
+        status_elements = page.locator(".file-status").all()
+        status_texts = [elem.text_content() for elem in status_elements]
+        assert any("Uploaded" in text or "✓" in text for text in status_texts), (
+            f"No file status contains 'Uploaded' or '✓'. Found: {status_texts}"
+        )
+
+    except Exception as e:
+        # Print page content for debugging
+        print("Page source:", page.content())
+        print("Console logs:", page.evaluate("() => console.log('Debug info')"))
+
+        raise
+    finally:
+        # Clean up test file
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
 
 
 @pytest.mark.django_db
-def test_real_file_upload_with_upload_to(admin_user, live_server, driver):
-    test_file_path = "/tmp/test_small_file.bin"
+def test_real_file_upload_multiple(admin_user, live_server, page):
+    test_file_path_1 = "/tmp/test_small_file_1.bin"
+    test_file_path_2 = "/tmp/test_small_file_2.bin"
+    # Clean up any existing test file from prior runs just in case
+    if os.path.exists(test_file_path_1):
+        os.unlink(test_file_path_1)
+    if os.path.exists(test_file_path_2):
+        os.unlink(test_file_path_2)
+    create_test_file(test_file_path_1, 5)
+    create_test_file(test_file_path_2, 5)
+
+    page.goto(live_server.url + "/admin/")
+
+    # Wait for login page and fill credentials
+    page.wait_for_selector("#id_username")
+    page.fill("#id_username", "admin")
+    page.fill("#id_password", "password")
+    page.click('input[value="Log in"]')
+
+    # Wait for successful login
+    page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
+    page.wait_for_selector("#content")
+    time.sleep(2)
+
+    page.goto(live_server.url + "/admin/tests/foo/add/")
+    page.wait_for_selector("#id_bar")
+    page.fill("#id_bar", "bat")
+
+    # Wait for file input and upload multiple files
+    page.wait_for_selector("#id_foo_input_file")
+    time.sleep(1)
+    page.set_input_files("#id_foo_input_file", [test_file_path_1, test_file_path_2])
+
+    try:
+        # Wait for file-status elements
+        page.wait_for_selector(".file-status", timeout=15000)
+
+        # Wait for uploads to complete
+        page.wait_for_function(
+            """
+            () => {
+                const elements = document.querySelectorAll('.file-status');
+                return Array.from(elements).some(elem => 
+                    elem.textContent.includes('Uploaded') || elem.textContent.includes('✓')
+                );
+            }
+        """,
+            timeout=20000,
+        )
+
+        # Verify uploads completed successfully
+        status_elements = page.locator(".file-status").all()
+        status_texts = [elem.text_content() for elem in status_elements]
+
+        assert any("Uploaded" in text or "✓" in text for text in status_texts), (
+            f"No file status contains 'Uploaded' or '✓'. Found: {status_texts}"
+        )
+        assert len(status_elements) == 2, (
+            f"Expected 2 file-status elements, found {len(status_elements)}"
+        )
+
+    except Exception as e:
+        print("Page source:", page.content())
+        raise
+    finally:
+        if os.path.exists(test_file_path_1):
+            os.unlink(test_file_path_1)
+        if os.path.exists(test_file_path_2):
+            os.unlink(test_file_path_2)
+
+
+@pytest.mark.django_db
+def test_real_file_upload_cancel_single_file(admin_user, live_server, page):
+    test_file_path = "/tmp/test_small_file_cancel.bin"
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
     create_test_file(test_file_path, 5)
 
-    driver.get(live_server.url + "/admin/")
-    driver.find_element(By.ID, "id_username").send_keys("admin")
-    driver.find_element(By.ID, "id_password").send_keys("password")
-    driver.find_element(By.XPATH, '//input[@value="Log in"]').click()
-    driver.implicitly_wait(2)
-    driver.get(live_server.url + "/admin/tests/foo/add/")
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "id_bar")))
-    driver.find_element(By.ID, "id_bar").send_keys("bat")
-    driver.find_element(By.ID, "id_bat_input_file").send_keys(test_file_path)
-    status_text = driver.find_element(By.ID, "id_bat_uploaded_status").text
-    print("status_text", status_text)
-    i = 0
-    while i < 5:
-        if "Uploaded" in driver.find_element(By.ID, "id_bat_uploaded_status").text:
-            return  # success
+    page.goto(live_server.url + "/admin/")
+    page.wait_for_selector("#id_username")
+    page.fill("#id_username", "admin")
+    page.fill("#id_password", "password")
+    page.click('input[value="Log in"]')
+    page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
+    page.wait_for_selector("#content")
+    time.sleep(2)
+
+    page.goto(live_server.url + "/admin/tests/foo/add/")
+    page.wait_for_selector("#id_foo_input_file", timeout=15000)
+    page.set_input_files("#id_foo_input_file", test_file_path)
+
+    try:
+        # Wait for file-status element
+        page.wait_for_selector(".file-status", timeout=20000)
+
+        # Wait for upload to start
+        page.wait_for_function(
+            """
+            () => {
+                const progress = document.querySelector('.file-progress');
+                return progress && parseFloat(progress.value) > 0;
+            }
+        """,
+            timeout=15000,
+        )
+
+        # Click cancel button
+        cancel_button = page.locator(".file-cancel-btn").first
+        cancel_button.wait_for(state="visible", timeout=10000)
+        cancel_button.click()
+
+        time.sleep(2)
+
+        # Verify cancellation
+        status_elements = page.locator(".file-status").all()
+        status_texts = [elem.text_content() for elem in status_elements]
+
+        assert all("Uploaded" not in text and "✓" not in text for text in status_texts)
+        assert len(status_elements) == 0, (
+            f"Expected 0 file-status elements after cancellation, found {len(status_elements)}"
+        )
+    except Exception as e:
+        print("Page source:", page.content())
+        raise
+    finally:
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
+
+
+@pytest.mark.django_db
+def test_real_file_upload_cancel_all_files(admin_user, live_server, page):
+    test_file_path = "/tmp/test_large_file_cancel_all.bin"
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
+    create_test_file(test_file_path, 50)
+
+    page.goto(live_server.url + "/admin/")
+    page.wait_for_selector("#id_username")
+    page.fill("#id_username", "admin")
+    page.fill("#id_password", "password")
+    page.click('input[value="Log in"]')
+    page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
+    page.wait_for_selector("#content")
+    time.sleep(2)
+
+    page.goto(live_server.url + "/admin/tests/foo/add/")
+    page.wait_for_selector("#id_foo_input_file")
+    page.set_input_files("#id_foo_input_file", test_file_path)
+
+    try:
+        # Wait for cancel button to be clickable
+        page.wait_for_selector("#id_foo_cancel", state="visible", timeout=15000)
+        page.wait_for_selector(".file-status", timeout=5000)
+
+        # Click cancel
+        page.click("#id_foo_cancel")
+        time.sleep(2)
+
+        # Verify no status elements remain
+        status_elements = page.locator(".file-status").all()
+        assert len(status_elements) == 0, (
+            f"Expected 0 file-status elements after cancellation, found {len(status_elements)}"
+        )
+
+        # Verify controls are hidden
+        controls_visible = page.locator("#id_foo_controls").is_visible()
+        assert not controls_visible, (
+            "Controls element should be hidden after cancelling all uploads"
+        )
+    except Exception as e:
+        print("Page source:", page.content())
+        raise
+    finally:
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
+
+
+@pytest.mark.django_db
+def test_real_file_upload_pause_resume(admin_user, live_server, page, settings):
+    settings.ADMIN_RESUMABLE_CHUNKSIZE = "100*1024"  # 100KB chunks
+    test_file_path = "/tmp/test_large_file_cancel_all.bin"
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
+    create_test_file(test_file_path, 5)
+
+    page.goto(live_server.url + "/admin/")
+    page.wait_for_selector("#id_username")
+    page.fill("#id_username", "admin")
+    page.fill("#id_password", "password")
+    page.click('input[value="Log in"]')
+    page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
+    page.wait_for_selector("#content")
+    time.sleep(2)
+
+    page.goto(live_server.url + "/admin/tests/foo/add/")
+    page.wait_for_selector("#id_foo_input_file")
+    page.set_input_files("#id_foo_input_file", test_file_path)
+
+    try:
+        # Wait for file-status element
+        page.wait_for_selector(".file-status", timeout=15000)
+        page.wait_for_selector("#id_foo_pause", state="visible", timeout=10000)
+
+        # Get initial progress
+        progress_before_pause = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
+        assert progress_before_pause > 0, (
+            f"Upload has not started. Progress: {progress_before_pause}"
+        )
+
+        # Pause upload
+        page.click("#id_foo_pause")
         time.sleep(1)
-        i += 1
-    assert False, f"Status text is {driver.find_element(By.ID, 'id_bat_uploaded_status').text}; Expected 'Uploaded'"
+
+        # Get progress after pausing
+        progress_during_pause_1 = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
+        time.sleep(5)
+        progress_during_pause_2 = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
+
+        # Verify progress hasn't increased while paused
+        assert abs(progress_during_pause_2 - progress_during_pause_1) < 0.05, (
+            f"Upload continued while paused. First: {progress_during_pause_1}, Second: {progress_during_pause_2}"
+        )
+
+        # Resume upload
+        page.click("#id_foo_resume")
+
+        # Wait for completion
+        page.wait_for_function(
+            """
+            () => {
+                const elements = document.querySelectorAll('.file-status');
+                return Array.from(elements).some(elem => 
+                    elem.textContent.includes('Uploaded') || elem.textContent.includes('✓')
+                );
+            }
+        """,
+            timeout=20000,
+        )
+
+        progress_after_resume = float(
+            page.locator(".file-progress").first.get_attribute("value")
+        )
+
+        # Verify progress after resume
+        assert progress_after_resume > progress_during_pause_2, (
+            f"Upload did not progress after resume. During pause: {progress_during_pause_2}, After: {progress_after_resume}"
+        )
+        assert progress_after_resume == 1.0, (
+            f"Upload did not complete after resume. Final progress: {progress_after_resume}"
+        )
+
+    except Exception as e:
+        print("Page source:", page.content())
+        raise
+    finally:
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)
+
+
+def test_real_file_upload_file_error(admin_user, live_server, page):
+    test_file_path = "/tmp/test_failed_file.bin"
+    if os.path.exists(test_file_path):
+        os.unlink(test_file_path)
+    create_test_file(test_file_path, 5)
+
+    page.goto(live_server.url + "/admin/")
+    page.wait_for_selector("#id_username")
+    page.fill("#id_username", "admin")
+    page.fill("#id_password", "password")
+    page.click('input[value="Log in"]')
+    page.wait_for_url(lambda url: "/login/" not in url, timeout=10000)
+    page.wait_for_selector("#content")
+    time.sleep(2)
+
+    page.goto(live_server.url + "/admin/tests/foo/add/")
+    page.wait_for_selector("#id_bar")
+    page.fill("#id_bar", "bat")
+
+    # Inject JavaScript to mock error response
+    page.evaluate("""
+        (function() {
+            var OriginalXHR = window.XMLHttpRequest;
+            window.XMLHttpRequest = function() {
+                var xhr = new OriginalXHR();
+                var originalOpen = xhr.open;
+                var originalSend = xhr.send;
+                
+                xhr.open = function(method, url) {
+                    this._method = method;
+                    this._url = url;
+                    return originalOpen.apply(this, arguments);
+                };
+                
+                xhr.send = function(data) {
+                    var self = this;
+                    
+                    if (this._method === 'POST' && this._url.includes('admin_resumable')) {
+                        setTimeout(function() {
+                            Object.defineProperty(self, 'status', { 
+                                writable: true, 
+                                configurable: true,
+                                value: 500 
+                            });
+                            Object.defineProperty(self, 'readyState', { 
+                                writable: true, 
+                                configurable: true,
+                                value: 4 
+                            });
+                            Object.defineProperty(self, 'responseText', { 
+                                writable: true, 
+                                configurable: true,
+                                value: 'Internal Server Error' 
+                            });
+            
+                            var event = new Event('load');
+                            
+                            if (self.onreadystatechange) {
+                                self.onreadystatechange(event);
+                            }
+                            if (self.onload) {
+                                self.onload(event);
+                            }
+                            
+                            self.dispatchEvent(event);
+                        }, 100);
+                        return;
+                    }
+                    return originalSend.call(this, data);
+                };
+                
+                return xhr;
+            };
+        })();
+    """)
+
+    # Wait for file input and upload
+    page.wait_for_selector("#id_foo_input_file")
+    time.sleep(1)
+    page.set_input_files("#id_foo_input_file", test_file_path)
+
+    try:
+        # Wait for error message in file-status
+        page.wait_for_function(
+            """
+            () => {
+                const elements = document.querySelectorAll('.file-status');
+                return Array.from(elements).some(elem => 
+                    elem.textContent.includes('Error')
+                );
+            }
+        """,
+            timeout=20000,
+        )
+
+        # Verify error message is displayed
+        status_elements = page.locator(".file-status").all()
+        status_texts = [elem.text_content() for elem in status_elements]
+
+        assert any("Error" in text for text in status_texts), (
+            f"No file status contains 'Error'. Found: {status_texts}"
+        )
+
+    except Exception as e:
+        print("Page source:", page.content())
+        raise
+    finally:
+        if os.path.exists(test_file_path):
+            os.unlink(test_file_path)

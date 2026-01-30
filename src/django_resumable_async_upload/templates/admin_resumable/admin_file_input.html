@@ -1,0 +1,396 @@
+{% load i18n %}
+<script>
+
+  //check that variable exists
+  if (typeof djangoAdminResumableFieldListenerSetUp=="undefined")
+  {
+      {#  var is used instead of let to provide expected scope of view #}
+    var djangoAdminResumableFieldListenerSetUp = false;
+  }
+
+
+  (function($) {
+      function setupField(elementId) {
+
+        console.log('setting up '+ elementId);
+
+        $('form').submit(function() {
+            if($(this).hasClass(elementId + '_disabled')) {
+                alert("File upload is still in progress.")  //FIXME: fires several alerts for each file
+                return false;
+            }
+        });
+
+        if (!(new Resumable().support)) {
+            alert("No uploader support");
+        }
+        var maxFiles = {% if max_files %}{{ max_files }}{% else %}undefined{% endif %}; // undefined means unlimited
+
+        var r = new Resumable({
+            target: '{% url 'admin_resumable' %}',
+            chunkSize: {{ chunk_size }},
+            maxFiles: maxFiles,
+            query: {
+                csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(),
+                field_name: '{{ field_name }}',                 {# FIXME: this probably should be checked at run time for added inlines #}
+                content_type_id: '{{ content_type_id }}',       {# FIXME: this probably should be checked at run time for added inlines #}
+                instance_id: '{{ instance_id }}'
+            },
+            simultaneousUploads: {{ simultaneous_uploads }},
+        });
+
+        var isPaused = false;
+        var uploadedFiles = [];
+
+        function cancelFileUpload(fileId, uploadedFiles){
+          var filePath = $('#' + fileId + '_container').data('filePath');
+          // If file was uploaded, delete it from storage
+          if (filePath) {
+              $.ajax({
+                  url: '{% url 'admin_resumable' %}',
+                  type: 'DELETE',
+                  contentType: 'application/json',
+                  headers: {
+                      'X-CSRFToken': $("input[name='csrfmiddlewaretoken']").val()
+                  },
+                  data: JSON.stringify({ file_path: filePath }),
+                  success: function() {
+                      console.log("Deleted file from storage: " + filePath);
+                  },
+                  error: function(xhr, status, error) {
+                      console.error("Failed to delete file:", error);
+                  }
+              });
+
+              // Remove from uploadedFiles array
+              var index = uploadedFiles.indexOf(filePath);
+              if (index > -1) {
+                  uploadedFiles.splice(index, 1);
+                  if (maxFiles === 1) {
+                      $('#' + elementId).val('');
+                  } else {
+                      $('#' + elementId).val(JSON.stringify(uploadedFiles));
+                  }
+              }
+          } else {
+              // File not yet uploaded, just cancel the upload
+              console.log("No filepath for " + fileId);
+          }
+          // Remove UI element
+          $('#' + fileId + '_container').remove();
+        }
+
+        $('#' + elementId + '_cancel').on('click', function() {
+            isPaused = false;
+            // if cancel all is clicked while some have completed upload,
+            // we need to delete the completed files from storage
+            if (uploadedFiles.length){
+              for (var i = 0; i < r.files.length; i++) {
+                var file = r.files[i];
+                var fileId = elementId + '_file_' + file.uniqueIdentifier;
+                var filePath = $('#' + fileId + '_container').data('filePath');
+                cancelFileUpload(fileId, uploadedFiles);
+              }
+            }
+            // Now cancel all uploads in Resumable.js
+            r.cancel();
+
+            $('#' + elementId + '_files_list').empty(); // clear the file list UI
+            $("#" + elementId + "_input_file").show(); // show the file input again
+            $('#' + elementId + '_controls').hide(); // hide the controls
+            $("form").removeClass(elementId + "_disabled"); // re-enable the form
+        });
+
+        $('#' + elementId + '_pause').on('click', function() {
+            if (!isPaused) {
+                isPaused = true;
+                r.pause();
+                $('.file-status').each(function() {
+                    if ($(this).text().includes('Uploading')) {
+                        $(this).text($(this).text().replace('Uploading', 'Paused'));
+                    }
+                });
+                $('#' + elementId + '_pause').hide();
+                $('#' + elementId + '_resume').show();
+            }
+        });
+
+        $('#' + elementId + '_resume').on('click', function() {
+            if (isPaused) {
+                isPaused = false;
+                r.upload();
+                $('.file-status').each(function() {
+                    if ($(this).text().includes('Paused')) {
+                        $(this).text($(this).text().replace('Paused', 'Uploading'));
+                    }
+                });
+                $('#' + elementId + '_resume').hide();
+                $('#' + elementId + '_pause').show();
+            }
+        });
+
+        r.assignBrowse($('#' + elementId + '_input_file'));
+        r.on('fileAdded', function(file) {
+            // Create a unique ID for this file
+            var fileId = elementId + '_file_' + file.uniqueIdentifier;
+
+
+            // Add file item to the list
+            var fileHtml = '<div id="' + fileId + '_container" class="single-file-container">' +
+                '<div class="single-file-container-inner">' +
+                    '<strong class="flex-1">' + file.fileName + '</strong>' +
+                    '<div class="file-status-container">' +
+                        '<span id="' + fileId + '_status" class="file-status" style="color: #666;"></span>' +
+                        '<button type="button" id="' + fileId + '_cancel_btn" class="file-cancel-btn">Cancel</button>' +
+                    '</div>' +
+                '</div>' +
+                '<progress class="file-progress" id="' + fileId + '_progress" value="0" max="1"></progress>' +
+                '<div id="' + fileId + '_preview" style="margin-top: 10px;"></div>' +
+            '</div>';
+
+            $('#' + elementId + '_files_list').append(fileHtml);
+            $('#' + fileId + '_status').text('Waiting...');
+
+            // Store file object for later reference
+            $('#' + fileId + '_container').data('file', file);
+            $('#' + fileId + '_container').data('filePath', null); // Will be set after upload
+
+            // Add cancel button handler for this specific file
+            $('#' + fileId + '_cancel_btn').on('click', function() {
+              cancelFileUpload(fileId, uploadedFiles);
+              // Remove file from Resumable.js tracking
+              file.cancel();
+
+              // If no more files, hide controls and re-enable form
+              if (r.files.length === 0 || $('#' + elementId + '_files_list').children().length === 0) {
+                  $("form").removeClass(elementId + "_disabled");
+                  $("#" + elementId + "_input_file").show();
+                  $('#' + elementId + '_controls').hide();
+              }
+            });
+
+            r.upload();
+
+            $("form").addClass(elementId + "_disabled");
+            $("#" + elementId + "_input_file").hide();
+            $('#' + elementId + '_controls').show();
+        });
+
+        r.on('fileSuccess', function(file, message) {
+            var uniqueId = file.uniqueIdentifier;
+            var fileId = elementId + '_file_' + uniqueId; // used for HTML element IDs
+
+            // Check that the name of the file is returned and not "chunk uploaded"
+            if(message.toLowerCase().includes("chunk uploaded")) {
+                $('#' + fileId + '_status').html('<span style="color: red;">Error - please re-upload</span>');
+                $('#' + fileId + '_progress').val(0);
+            } else {
+                // Only add if not already in the array
+                if (uploadedFiles.indexOf(message) === -1) {
+                    uploadedFiles.push(message); // add the file name to the list of uploaded file names
+                }
+                $('#' + fileId + '_status').html('<span style="color: green;">✓ Uploaded</span>');
+                $('#' + fileId + '_progress').val(1);
+                // Store the file path for reference for (optional) deletion later
+                $('#' + fileId + '_container').data('filePath', message);
+                // Change cancel button to remove button after upload
+                $('#' + fileId + '_cancel_btn').text('Remove').css('background', '#6c757d');
+
+                // Update hidden input
+                if (maxFiles === 1) {
+                    // Single file mode - store just the path
+                    $('#' + elementId).val(message);
+                } else {
+                    // Multiple files mode - store as JSON array
+                    $('#' + elementId).val(JSON.stringify(uploadedFiles));
+                }
+
+                // Display image preview if it's an image file
+                var fileType = file.file.type;
+                if (fileType && fileType.startsWith('image/') && {{ show_thumb|yesno:"true,false" }} && {% if MEDIA_URL %}true{% else %}false{% endif %} ) {
+                    var imageUrl = '{{ MEDIA_URL|escapejs }}' + message;
+                    var imgHtml = '<img src="' + imageUrl + '" class="thumbnail " />';
+                    $('#' + fileId + '_preview').html(imgHtml);
+                }
+            }
+
+            // Check if all files are complete
+            if (r.files.length === uploadedFiles.length) {
+                $("form").removeClass(elementId + "_disabled");
+                $('#' + elementId + '_controls').hide();
+            }
+        });
+
+        r.on('fileError', function(file, message) {
+            var fileId = elementId + '_file_' + file.uniqueIdentifier;
+            $('#' + fileId + '_status').html('<span style="color: red;">Error: ' + message + '</span>');
+        });
+
+        r.on('fileProgress', function(file) {
+            var fileId = elementId + '_file_' + file.uniqueIdentifier;
+            var progress = file.progress();
+            $('#' + fileId + '_progress').val(progress);
+
+            if (!isPaused) {
+                $('#' + fileId + '_status').text('Uploading... ' + Math.floor(progress * 100) + '%');
+            }
+        });
+
+      }
+
+      // fire on DOMReady
+      $(function(){
+        // id here is the one that is known upon page generation.
+        // For new inlines it will be replace with a placeholder that will be updated by page js.
+        // That's why we use formset:added event - to get the actual id that is generated
+        // by django-admin's inlines.js code
+        // FIXME: don't execute if id contains "__prefix__" - django's placeholder for id
+        setupField('{{ id }}');
+      });
+
+      // should be set up once
+      if(!djangoAdminResumableFieldListenerSetUp){
+        // setup admin inline creation listener so we can get the id of created fields instead
+        // of a placeholder stored in { id } for new fields
+        $(document).on('formset:added', function(event, $row, formsetName) {
+            //check if there are resumable fields and set them up with their actual ids
+
+            $row.find('input.django-admin-resumable-file').each(
+                function () {
+                    let el = $(this);
+                    let strippedId = el.attr('id').replace('_input_file', '');
+                    setupField(strippedId)
+                }
+            )
+        });
+
+        djangoAdminResumableFieldListenerSetUp = true;
+      }
+
+  })(typeof django !== "undefined" ? django.jQuery : jQuery);
+</script>
+
+<style>
+  .cancel-all-btn {
+    background: red;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+
+  .pause-resume-btn {
+    background: #97aec8;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .controls-container {
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .single-file-container {
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .single-file-container-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  .flex-1 {
+    flex: 1;
+  }
+
+  .file-list {
+    margin-bottom: 15px;
+  }
+
+  .file-status-container {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .file-cancel-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .file-progress {
+    width: 100%;
+    height: 20px;
+  }
+</style>
+
+<div id="file-upload-container">
+  <p class="file-upload">
+    {% if value %} {% trans 'Currently' %}: {% if file_url %}
+    <a id="{{ id }}_link" target="_new" href="{{ file_url }}"
+      >{{ file_name }}</a
+    >
+    {% if show_thumb %}
+    <img src="{{ file_url }}" style="width: 250px" />
+    {% endif %} {% else %} {{ value }} {% endif %} {{ clear_checkbox }}
+    <br />
+    {% trans 'Change' %}: {% endif %}
+  </p>
+
+  <div class="mb-3">
+    <label for="{{ id }}_input_file" style="display: none">File upload:</label>
+    <input
+      type="file"
+      name="{{ id }}_input_file"
+      id="{{ id }}_input_file"
+      class="django-admin-resumable-file"
+      value="{{ value }}"
+      style="color: transparent"
+      {%
+      if
+      max_files
+      !="1"
+      %}multiple{%
+      endif
+      %}
+    />
+  </div>
+
+  <div id="{{ id }}_files_list" class="file-list"></div>
+
+  <div id="{{ id }}_controls" class="controls-container" style="display: none">
+    <button type="button" class="cancel-all-btn" id="{{ id }}_cancel">
+      Cancel All
+    </button>
+    <button type="button" class="pause-resume-btn" id="{{ id }}_pause">
+      Pause All
+    </button>
+    <button
+      type="button"
+      class="pause-resume-btn"
+      style="display: none"
+      id="{{ id }}_resume"
+    >
+      Resume All
+    </button>
+  </div>
+  <input type="hidden" name="{{ name }}" id="{{ id }}" value="{{ value }}" />
+</div>
